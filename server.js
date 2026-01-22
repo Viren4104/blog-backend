@@ -5,12 +5,15 @@ const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const postRoutes = require('./routes/postRoutes');
 
+// Load environment variables early
+require('dotenv').config();
+
 const app = express();
 
 // 1. CORS Configuration
-// This allows your frontend (localhost:1212) to talk to this backend
+// This enables your frontend to communicate with the backend
 app.use(cors({
-    origin: '*', // Allow requests from ANYWHERE (Easiest for testing)
+    origin: '*', // Allows access from any domain (Safe for this stage)
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -19,20 +22,20 @@ app.use(cors({
 app.use(express.json());
 
 // 3. Route Definitions
+// Note: These define the paths. Your frontend MUST include '/api'
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/posts', postRoutes);
 
-// 4. Default Route (Optional: Good for checking if server is live)
+// 4. Default Route (Health Check)
 app.get('/', (req, res) => {
-    res.send('Blog Backend is Running!');
+    res.send('Blog Backend is Running! Use /api/auth/register to sign up.');
 });
 
-// 5. Database Sync and Server Start
-// NOTE: We use process.env.PORT because Render assigns a random port (e.g. 10000)
+// 5. Server Start
 const PORT = process.env.PORT || 3000;
 
-sequelize.sync({ alter: true }) // 'alter: true' updates tables if you change models
+sequelize.sync({ alter: true })
     .then(() => {
         console.log("Database connected & synced successfully.");
         app.listen(PORT, () => {
