@@ -1,43 +1,81 @@
 const express = require('express');
 const cors = require('cors'); 
+const bcrypt = require('bcryptjs'); // Needed for password hashing
 const sequelize = require('./config/db');
+const User = require('./models/User'); // Import User model
+
+// Routes
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const postRoutes = require('./routes/postRoutes');
 
-// Load environment variables early
 require('dotenv').config();
 
 const app = express();
 
 // 1. CORS Configuration
-// This enables your frontend to communicate with the backend
 app.use(cors({
-    origin: '*', // Allows access from any domain (Safe for this stage)
+    origin: '*', 
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// 2. Middleware to parse JSON bodies
+// 2. Middleware
 app.use(express.json());
 
-// 3. Route Definitions
-// Note: These define the paths. Your frontend MUST include '/api'
+// 3. Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/posts', postRoutes);
 
-// 4. Default Route (Health Check)
+// 4. Default Route
 app.get('/', (req, res) => {
-    res.send('Blog Backend is Running! Use /api/auth/register to sign up.');
+    res.send('Blog Backend is Running! Login with admin@admin.com / admin123');
 });
+
+// --- MAGIC ADMIN CREATOR ---
+// This function runs automatically to ensure an Admin always exists
+const createDefaultAdmin = async () => {
+    try {
+        const adminEmail = 'admin@admin.com';
+        const existingAdmin = await User.findOne({ where: { email: adminEmail } });
+
+        if (!existingAdmin) {
+            console.log(">>> Creating Default Admin Account...");
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash('admin123', salt);
+
+            await User.create({
+                username: 'SuperAdmin',
+                email: adminEmail,
+                password: hashedPassword,
+                role: 'admin', // Forces Admin Role
+                can_create: true, can_edit: true, can_delete: true, can_read: true
+            });
+            console.log(">>> SUCCESS: Login with admin@admin.com / admin123");
+        } else {
+            // If admin exists, force their role to be 'admin' just in case
+            if (existingAdmin.role !== 'admin') {
+                await existingAdmin.update({ role: 'admin', can_create: true, can_delete: true });
+                console.log(">>> FIXED: admin@admin.com role updated to ADMIN.");
+            }
+        }
+    } catch (error) {
+        console.error(">>> Admin Seed Error:", error.message);
+    }
+};
+// ---------------------------
 
 // 5. Server Start
 const PORT = process.env.PORT || 3000;
 
-sequelize.sync({ alter: true })
-    .then(() => {
+sequelize.sync({ alter: true }) 
+    .then(async () => {
         console.log("Database connected & synced successfully.");
+        
+        // Run the Magic Admin Creator
+        await createDefaultAdmin(); 
+
         app.listen(PORT, () => {
             console.log(`Server is running on port ${PORT}`);
         });
