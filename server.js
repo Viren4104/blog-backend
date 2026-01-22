@@ -20,3 +20,10 @@ sequelize.sync({ alter: true }).then(() => {
 app.get('/', (req, res) => {
   res.send('Server is ready!');
 });
+const cors = require('cors');
+
+// Allow your frontend to access this backend
+app.use(cors({
+    origin: ["http://localhost:5173", "https://your-frontend-domain.com"],
+    credentials: true
+}));
