@@ -1,4 +1,5 @@
 const Post = require('../models/Post');
+const User = require('../models/User'); // Import User to link data
 
 // 1. Create a Post
 exports.createPost = async (req, res) => {
@@ -15,17 +16,23 @@ exports.createPost = async (req, res) => {
     }
 };
 
-// 2. Get All Posts
+// 2. Get All Posts (IMPROVED)
 exports.getAllPosts = async (req, res) => {
     try {
-        const posts = await Post.findAll();
+        const posts = await Post.findAll({
+            include: [{ // <--- This performs a "Join"
+                model: User,
+                attributes: ['username', 'email'] // Only fetch name/email, NOT password
+            }],
+            order: [['createdAt', 'DESC']] // <--- Show NEWEST posts first
+        });
         res.json(posts);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 };
 
-// 3. Update a Post (THIS WAS MISSING)
+// 3. Update a Post
 exports.updatePost = async (req, res) => {
     try {
         const { id } = req.params;

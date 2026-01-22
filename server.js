@@ -1,10 +1,13 @@
 const express = require('express');
 const cors = require('cors'); 
-const bcrypt = require('bcryptjs'); // Needed for password hashing
+const bcrypt = require('bcryptjs'); 
 const sequelize = require('./config/db');
-const User = require('./models/User'); // Import User model
 
-// Routes
+// --- IMPORTS: MODELS ---
+const User = require('./models/User'); 
+const Post = require('./models/Post'); // <--- ADDED THIS
+
+// --- IMPORTS: ROUTES ---
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const postRoutes = require('./routes/postRoutes');
@@ -22,6 +25,14 @@ app.use(cors({
 
 // 2. Middleware
 app.use(express.json());
+
+// ============================================
+//  DEFINE RELATIONSHIPS (Added This Block)
+// ============================================
+// This tells the DB that a User "owns" Posts
+User.hasMany(Post, { onDelete: 'CASCADE' });
+Post.belongsTo(User);
+// ============================================
 
 // 3. Routes
 app.use('/api/auth', authRoutes);
@@ -83,3 +94,4 @@ sequelize.sync({ alter: true })
     .catch((err) => {
         console.error("Failed to connect to the database:", err.message);
     });
+
