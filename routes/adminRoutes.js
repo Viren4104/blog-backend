@@ -9,7 +9,7 @@ const adminController = require('../controllers/adminController');
 // ADMIN ROUTES (Admin Only)
 // ==========================================================
 
-// GET ALL USERS (Admin Dashboard)
+// GET ALL USERS
 router.get(
   '/users',
   verifyToken,
