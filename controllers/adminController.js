@@ -1,16 +1,18 @@
-const User = require('../models/User');
+import pool from "../config/db.js";
 
 // ===============================
 // GET ALL USERS (ADMIN)
 // ===============================
-exports.getAllUsers = async (req, res) => {
+export const getAllUsers = async (req, res) => {
   try {
-    const users = await User.findAll({
-      attributes: { exclude: ['password'] }, // 🔐 never expose passwords
-      order: [['id', 'ASC']]
-    });
+    // Select everything EXCEPT the password
+    const result = await pool.query(
+      `SELECT id, username, email, role, can_create, can_edit, can_delete, can_read 
+       FROM users 
+       ORDER BY id ASC`
+    );
 
-    res.json(users);
+    res.json(result.rows);
   } catch (err) {
     console.error("GET USERS ERROR:", err);
     res.status(500).json({ message: "Server error" });
@@ -20,58 +22,59 @@ exports.getAllUsers = async (req, res) => {
 // ===============================
 // UPDATE USER ROLE + PERMISSIONS (ADMIN)
 // ===============================
-exports.updateUserPermissions = async (req, res) => {
+export const updateUserPermissions = async (req, res) => {
   try {
     const { userId } = req.params;
     const { role, can_create, can_edit, can_delete, can_read } = req.body;
 
     // 1️⃣ Validate role
-    const allowedRoles = ['user', 'manager', 'admin'];
+    const allowedRoles = ["user", "manager", "admin"];
     if (role && !allowedRoles.includes(role)) {
       return res.status(400).json({ message: "Invalid role" });
     }
 
     // 2️⃣ Find target user
-    const user = await User.findByPk(userId);
+    const userResult = await pool.query("SELECT * FROM users WHERE id = $1", [userId]);
 
-    if (!user) {
+    if (!userResult.rows.length) {
       return res.status(404).json({ message: "User not found" });
     }
 
+    const user = userResult.rows[0];
+
     // 3️⃣ Prevent changing another admin
-    if (user.role === 'admin' && req.user.id !== user.id) {
+    if (user.role === "admin" && req.user.id !== user.id) {
       return res.status(403).json({ message: "Cannot modify another admin" });
     }
 
     // 4️⃣ Prevent admin downgrading self
-    if (req.user.id === user.id && role === 'user') {
+    if (req.user.id === user.id && role === "user") {
       return res.status(400).json({
-        message: "Safety Alert: You cannot remove your own admin access"
+        message: "Safety Alert: You cannot remove your own admin access",
       });
     }
 
-    // 5️⃣ Update fields (only if provided)
-    if (role !== undefined) user.role = role;
-    if (can_create !== undefined) user.can_create = can_create;
-    if (can_edit !== undefined) user.can_edit = can_edit;
-    if (can_delete !== undefined) user.can_delete = can_delete;
-    if (can_read !== undefined) user.can_read = can_read;
+    // 5️⃣ Prepare updated values (fallback to existing values if not provided)
+    const newRole = role !== undefined ? role : user.role;
+    const newCanCreate = can_create !== undefined ? can_create : user.can_create;
+    const newCanEdit = can_edit !== undefined ? can_edit : user.can_edit;
+    const newCanDelete = can_delete !== undefined ? can_delete : user.can_delete;
+    const newCanRead = can_read !== undefined ? can_read : user.can_read;
 
-    await user.save();
+    // 6️⃣ Execute Update
+    const updatedUserResult = await pool.query(
+      `UPDATE users 
+       SET role = $1, can_create = $2, can_edit = $3, can_delete = $4, can_read = $5 
+       WHERE id = $6 
+       RETURNING id, role, can_create, can_edit, can_delete, can_read`,
+      [newRole, newCanCreate, newCanEdit, newCanDelete, newCanRead, userId]
+    );
 
     res.json({
       success: true,
       message: "User permissions updated successfully",
-      updatedUser: {
-        id: user.id,
-        role: user.role,
-        can_create: user.can_create,
-        can_edit: user.can_edit,
-        can_delete: user.can_delete,
-        can_read: user.can_read
-      }
+      updatedUser: updatedUserResult.rows[0],
     });
-
   } catch (err) {
     console.error("UPDATE PERMISSIONS ERROR:", err);
     res.status(500).json({ message: "Server error" });
