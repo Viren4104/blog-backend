@@ -1,91 +1,124 @@
-const pool = require("../config/db");
+const User = require("../models/User");
 
-// ===============================
-// GET ALL USERS (ADMIN)
-// ===============================
+/**
+ * ✅ Get all users (Admin only)
+ */
 exports.getAllUsers = async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT id, username, email, role, can_create, can_edit, can_delete, can_read
-       FROM users
-       ORDER BY id ASC`
-    );
-
-    res.json(result.rows);
-  } catch (err) {
-    console.error("GET USERS ERROR:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// ===============================
-// UPDATE USER ROLE + PERMISSIONS (ADMIN)
-// ===============================
-exports.updateUserPermissions = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { role, can_create, can_edit, can_delete, can_read } = req.body;
-
-    // 1️⃣ Validate role
-    const allowedRoles = ["user", "manager", "admin"];
-    if (role && !allowedRoles.includes(role)) {
-      return res.status(400).json({ message: "Invalid role" });
-    }
-
-    // 2️⃣ Find target user
-    const userResult = await pool.query(
-      "SELECT * FROM users WHERE id = $1",
-      [userId]
-    );
-
-    if (!userResult.rows.length) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    const user = userResult.rows[0];
-
-    // 3️⃣ Prevent modifying another admin
-    if (user.role === "admin" && req.user.id !== user.id) {
-      return res.status(403).json({ message: "Cannot modify another admin" });
-    }
-
-    // 4️⃣ Prevent admin downgrading self
-    if (req.user.id === user.id && role === "user") {
-      return res.status(400).json({
-        message: "Safety Alert: You cannot remove your own admin access",
+    // 🔐 Auth check (prevents crash)
+    if (!req.user) {
+      return res.status(401).json({
+        message: "Unauthorized: Token missing or invalid",
       });
     }
 
-    // 5️⃣ Fallback to existing values
-    const newRole = role ?? user.role;
-    const newCanCreate = can_create ?? user.can_create;
-    const newCanEdit = can_edit ?? user.can_edit;
-    const newCanDelete = can_delete ?? user.can_delete;
-    const newCanRead = can_read ?? user.can_read;
+    const users = await User.findAll({
+      attributes: { exclude: ["password"] },
+    });
 
-    // 6️⃣ Update user
-    const updatedUser = await pool.query(
-      `UPDATE users
-       SET role = $1, can_create = $2, can_edit = $3, can_delete = $4, can_read = $5
-       WHERE id = $6
-       RETURNING id, role, can_create, can_edit, can_delete, can_read`,
-      [
-        newRole,
-        newCanCreate,
-        newCanEdit,
-        newCanDelete,
-        newCanRead,
-        userId,
-      ]
-    );
+    return res.status(200).json({
+      success: true,
+      count: users.length,
+      users,
+    });
+  } catch (error) {
+    console.error("Get Users Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
+    });
+  }
+};
 
-    res.json({
+/**
+ * ✅ Update user role & permissions (Admin only)
+ */
+exports.updateUserPermissions = async (req, res) => {
+  try {
+    // 🔐 VERY IMPORTANT GUARD (fixes your 500 error)
+    if (!req.user) {
+      return res.status(401).json({
+        message: "Unauthorized: Token missing or invalid",
+      });
+    }
+
+    const { userId } = req.params;
+    const { role, can_create, can_edit, can_delete, can_read } = req.body;
+
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // ✅ Update role & permissions
+    user.role = role ?? user.role;
+    user.can_create = can_create ?? user.can_create;
+    user.can_edit = can_edit ?? user.can_edit;
+    user.can_delete = can_delete ?? user.can_delete;
+    user.can_read = can_read ?? user.can_read;
+
+    await user.save();
+
+    return res.status(200).json({
       success: true,
       message: "User permissions updated successfully",
-      updatedUser: updatedUser.rows[0],
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        permissions: {
+          can_create: user.can_create,
+          can_edit: user.can_edit,
+          can_delete: user.can_delete,
+          can_read: user.can_read,
+        },
+      },
     });
-  } catch (err) {
-    console.error("UPDATE PERMISSIONS ERROR:", err);
-    res.status(500).json({ message: "Server error" });
+  } catch (error) {
+    console.error("Update Permissions Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update permissions",
+    });
+  }
+};
+
+/**
+ * ✅ Delete user (Admin only)
+ */
+exports.deleteUser = async (req, res) => {
+  try {
+    if (!req.user) {
+      return res.status(401).json({
+        message: "Unauthorized: Token missing or invalid",
+      });
+    }
+
+    const { userId } = req.params;
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    await user.destroy();
+
+    return res.status(200).json({
+      success: true,
+      message: "User deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete User Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete user",
+    });
   }
 };
