@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
+// Middleware 1: verify JWT and get LIVE user data
 exports.protect = async (req, res, next) => {
     try {
         let token;
@@ -11,8 +12,8 @@ exports.protect = async (req, res, next) => {
         if (!token) return res.status(401).json({ message: 'Token missing' });
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        // Fetch the live user data from DB
+        
+        // Fetch LIVE user to fix the "JWT not changing" issue
         const user = await User.findByPk(decoded.id, {
             attributes: { exclude: ['password'] }
         });
@@ -22,10 +23,11 @@ exports.protect = async (req, res, next) => {
         req.user = user;
         next();
     } catch (error) {
-        return res.status(401).json({ message: 'Invalid or expired token' });
+        return res.status(401).json({ message: 'Invalid token' });
     }
 };
 
+// Middleware 2: Check if user is an Admin
 exports.adminOnly = (req, res, next) => {
     if (req.user?.role !== "admin") {
         return res.status(403).json({ message: "Admin access only" });

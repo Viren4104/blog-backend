@@ -1,124 +1,45 @@
-const User = require("../models/User");
+const User = require('../models/User');
 
-/**
- * ✅ Get all users (Admin only)
- */
+// Controller 1: Get All Users
 exports.getAllUsers = async (req, res) => {
   try {
-    // 🔐 Auth check (prevents crash)
-    if (!req.user) {
-      return res.status(401).json({
-        message: "Unauthorized: Token missing or invalid",
-      });
-    }
-
     const users = await User.findAll({
-      attributes: { exclude: ["password"] },
+      attributes: { exclude: ['password'] },
+      order: [['id', 'ASC']]
     });
-
-    return res.status(200).json({
-      success: true,
-      count: users.length,
-      users,
-    });
-  } catch (error) {
-    console.error("Get Users Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to fetch users",
-    });
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
   }
 };
 
-/**
- * ✅ Update user role & permissions (Admin only)
- */
+// Controller 2: Update User Permissions & Role
 exports.updateUserPermissions = async (req, res) => {
   try {
-    // 🔐 VERY IMPORTANT GUARD (fixes your 500 error)
-    if (!req.user) {
-      return res.status(401).json({
-        message: "Unauthorized: Token missing or invalid",
-      });
-    }
-
     const { userId } = req.params;
     const { role, can_create, can_edit, can_delete, can_read } = req.body;
 
     const user = await User.findByPk(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+    // Prevent changing another admin or downgrading self
+    if (user.role === 'admin' && req.user.id !== user.id) {
+      return res.status(403).json({ message: "Cannot modify another admin" });
+    }
+    if (req.user.id === user.id && role === 'user') {
+      return res.status(400).json({ message: "Cannot remove your own admin access" });
     }
 
-    // ✅ Update role & permissions
-    user.role = role ?? user.role;
-    user.can_create = can_create ?? user.can_create;
-    user.can_edit = can_edit ?? user.can_edit;
-    user.can_delete = can_delete ?? user.can_delete;
-    user.can_read = can_read ?? user.can_read;
+    // Update fields
+    if (role !== undefined) user.role = role;
+    if (can_create !== undefined) user.can_create = can_create;
+    if (can_edit !== undefined) user.can_edit = can_edit;
+    if (can_delete !== undefined) user.can_delete = can_delete;
+    if (can_read !== undefined) user.can_read = can_read;
 
     await user.save();
-
-    return res.status(200).json({
-      success: true,
-      message: "User permissions updated successfully",
-      user: {
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        permissions: {
-          can_create: user.can_create,
-          can_edit: user.can_edit,
-          can_delete: user.can_delete,
-          can_read: user.can_read,
-        },
-      },
-    });
-  } catch (error) {
-    console.error("Update Permissions Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to update permissions",
-    });
-  }
-};
-
-/**
- * ✅ Delete user (Admin only)
- */
-exports.deleteUser = async (req, res) => {
-  try {
-    if (!req.user) {
-      return res.status(401).json({
-        message: "Unauthorized: Token missing or invalid",
-      });
-    }
-
-    const { userId } = req.params;
-
-    const user = await User.findByPk(userId);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
-    }
-
-    await user.destroy();
-
-    return res.status(200).json({
-      success: true,
-      message: "User deleted successfully",
-    });
-  } catch (error) {
-    console.error("Delete User Error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Failed to delete user",
-    });
+    res.json({ success: true, message: "Permissions updated" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
   }
 };

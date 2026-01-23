@@ -1,28 +1,18 @@
 const express = require('express');
 const router = express.Router();
 
-const { verifyToken } = require('../middleware/authMiddleware');
-const { isAdmin } = require('../middleware/roleMiddleware');
-const adminController = require('../controllers/adminController');
+// ✅ All names perfectly match the exports from middleware & controller
+const { getAllUsers, updateUserPermissions } = require('../controllers/adminController');
+const { protect, adminOnly } = require('../middleware/authMiddleware');
 
-// ==========================================================
-// ADMIN ROUTES (Admin Only)
-// ==========================================================
+// ==========================================
+// ADMIN ROUTES (/api/admin)
+// ==========================================
 
 // GET ALL USERS
-router.get(
-  '/users',
-  verifyToken,
-  isAdmin,
-  adminController.getAllUsers
-);
+router.get("/users", protect, adminOnly, getAllUsers);
 
 // UPDATE USER PERMISSIONS
-router.put(
-  '/permissions/:userId',
-  verifyToken,
-  isAdmin,
-  adminController.updateUserPermissions
-);
+router.patch("/users/:userId/permissions", protect, adminOnly, updateUserPermissions);
 
 module.exports = router;
