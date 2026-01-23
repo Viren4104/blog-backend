@@ -20,7 +20,7 @@ const app = express();
 ================================ */
 app.use(cors({
   origin: '*', // OK for now (lock later for frontend domain)
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], // ✅ PATCH added here!
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
