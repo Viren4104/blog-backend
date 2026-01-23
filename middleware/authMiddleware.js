@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-exports.verifyToken = async (req, res, next) => {
+// Protect routes - verify JWT token and fetch live user data
+exports.protect = async (req, res, next) => {
     try {
         let token;
 
@@ -20,10 +21,11 @@ exports.verifyToken = async (req, res, next) => {
             });
         }
 
-        // 3️⃣ Verify token
+        // 3️⃣ Verify token validity
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
         // 4️⃣ Fetch user from DB (latest role & permissions)
+        // This is the secret to fixing the "JWT not changing" issue!
         const user = await User.findByPk(decoded.id, {
             attributes: { exclude: ['password'] }
         });
@@ -34,7 +36,7 @@ exports.verifyToken = async (req, res, next) => {
             });
         }
 
-        // 5️⃣ Attach user to request
+        // 5️⃣ Attach the LIVE user data to the request
         req.user = user;
 
         next();
@@ -43,4 +45,12 @@ exports.verifyToken = async (req, res, next) => {
             message: 'Access denied: Invalid or expired token'
         });
     }
+};
+
+// Admin only middleware
+exports.adminOnly = (req, res, next) => {
+    if (req.user?.role !== "admin") {
+        return res.status(403).json({ message: "Admin access only" });
+    }
+    next();
 };
