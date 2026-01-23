@@ -1,80 +1,122 @@
-const User = require('../models/User');
+const express = require('express');
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const sequelize = require('./config/db'); // ✅ Corrected path
+require('dotenv').config();
 
-// ===============================
-// GET ALL USERS (ADMIN)
-// ===============================
-exports.getAllUsers = async (req, res) => {
-  try {
-    const users = await User.findAll({
-      attributes: { exclude: ['password'] }, // 🔐 never expose passwords
-      order: [['id', 'ASC']]
-    });
+// =======================
+// MODELS
+// =======================
+// ✅ Changed from '../models/User' to './models/User'
+const User = require('./models/User'); 
+const Post = require('./models/Post'); 
 
-    res.json(users);
-  } catch (err) {
-    console.error("GET USERS ERROR:", err);
-    res.status(500).json({ message: "Server error" });
-  }
+// =======================
+// ROUTES
+// =======================
+const authRoutes = require('./routes/authRoutes');
+const adminRoutes = require('./routes/adminRoutes');
+const postRoutes = require('./routes/postRoutes');
+
+const app = express();
+
+// =======================
+// CORS CONFIG
+// =======================
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// =======================
+// MIDDLEWARE
+// =======================
+app.use(express.json());
+
+// =======================
+// DATABASE RELATIONSHIPS
+// =======================
+User.hasMany(Post, {
+    foreignKey: 'userId',
+    onDelete: 'CASCADE'
+});
+Post.belongsTo(User, {
+    foreignKey: 'userId'
+});
+
+// =======================
+// API ROUTES
+// =======================
+app.use('/api/auth', authRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/posts', postRoutes);
+
+// =======================
+// HEALTH CHECK
+// =======================
+app.get('/', (req, res) => {
+    res.send('🚀 Blog Backend is Running! Login → admin@admin.com / admin123');
+});
+
+// =======================
+// DEFAULT ADMIN SEEDER
+// =======================
+const createDefaultAdmin = async () => {
+    try {
+        const adminEmail = 'admin@admin.com';
+
+        let admin = await User.findOne({ where: { email: adminEmail } });
+
+        if (!admin) {
+            console.log('>>> Creating Default Admin...');
+
+            const hashedPassword = await bcrypt.hash('admin123', 10);
+
+            await User.create({
+                username: 'SuperAdmin',
+                email: adminEmail,
+                password: hashedPassword,
+                role: 'admin',
+                can_create: true,
+                can_edit: true,
+                can_delete: true,
+                can_read: true
+            });
+
+            console.log('>>> ADMIN CREATED → admin@admin.com / admin123');
+        } else {
+            // Force admin permissions (safety net)
+            await admin.update({
+                role: 'admin',
+                can_create: true,
+                can_edit: true,
+                can_delete: true,
+                can_read: true
+            });
+
+            console.log('>>> Admin verified & permissions synced');
+        }
+    } catch (err) {
+        console.error('>>> Admin Seeder Error:', err.message);
+    }
 };
 
-// ===============================
-// UPDATE USER ROLE + PERMISSIONS (ADMIN)
-// ===============================
-exports.updateUserPermissions = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { role, can_create, can_edit, can_delete, can_read } = req.body;
+// =======================
+// SERVER START
+// =======================
+const PORT = process.env.PORT || 3000;
 
-    // 1️⃣ Validate role
-    const allowedRoles = ['user', 'manager', 'admin'];
-    if (role && !allowedRoles.includes(role)) {
-      return res.status(400).json({ message: "Invalid role" });
-    }
+sequelize.sync({ alter: true })
+    .then(async () => {
+        console.log('✅ Database connected & synced');
 
-    // 2️⃣ Find target user using Sequelize
-    const user = await User.findByPk(userId);
+        await createDefaultAdmin();
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // 3️⃣ Prevent changing another admin
-    if (user.role === 'admin' && req.user.id !== user.id) {
-      return res.status(403).json({ message: "Cannot modify another admin" });
-    }
-
-    // 4️⃣ Prevent admin downgrading self
-    if (req.user.id === user.id && role === 'user') {
-      return res.status(400).json({
-        message: "Safety Alert: You cannot remove your own admin access"
-      });
-    }
-
-    // 5️⃣ Update fields (only if provided)
-    if (role !== undefined) user.role = role;
-    if (can_create !== undefined) user.can_create = can_create;
-    if (can_edit !== undefined) user.can_edit = can_edit;
-    if (can_delete !== undefined) user.can_delete = can_delete;
-    if (can_read !== undefined) user.can_read = can_read;
-
-    // 6️⃣ Save changes to database
-    await user.save();
-
-    res.json({
-      success: true,
-      message: "User permissions updated successfully",
-      updatedUser: {
-        id: user.id,
-        role: user.role,
-        can_create: user.can_create,
-        can_edit: user.can_edit,
-        can_delete: user.can_delete,
-        can_read: user.can_read
-      }
+        app.listen(PORT, () => {
+            console.log(`🚀 Server running on port ${PORT}`);
+        });
+    })
+    .catch((err) => {
+        console.error('❌ Database connection failed:', err.message);
     });
-
-  } catch (err) {
-    console.error("UPDATE PERMISSIONS ERROR:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
