@@ -1,13 +1,18 @@
 const express = require('express');
 const router = express.Router();
+
 const authController = require('../controllers/authController');
 
-// Route: POST /api/auth/register
-// Description: Registers a new default user (User role, limited permissions)
+// ==========================================================
+// AUTH ROUTES
+// ==========================================================
+
+// REGISTER USER
+// POST /api/auth/register
 router.post('/register', authController.register);
 
-// Route: POST /api/auth/login
-// Description: Authenticates user and returns JWT + Role for redirection
+// LOGIN USER
+// POST /api/auth/login
 router.post('/login', authController.login);
 
 module.exports = router;

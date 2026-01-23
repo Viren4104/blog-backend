@@ -1,97 +1,121 @@
 const express = require('express');
-const cors = require('cors'); 
-const bcrypt = require('bcryptjs'); 
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
 const sequelize = require('./config/db');
+require('dotenv').config();
 
-// --- IMPORTS: MODELS ---
-const User = require('./models/User'); 
-const Post = require('./models/Post'); // <--- ADDED THIS
+// =======================
+// MODELS
+// =======================
+const User = require('./models/User');
+const Post = require('./models/Post');
 
-// --- IMPORTS: ROUTES ---
+// =======================
+// ROUTES
+// =======================
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const postRoutes = require('./routes/postRoutes');
 
-require('dotenv').config();
-
 const app = express();
 
-// 1. CORS Configuration
+// =======================
+// CORS CONFIG
+// =======================
 app.use(cors({
-    origin: '*', 
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// 2. Middleware
+// =======================
+// MIDDLEWARE
+// =======================
 app.use(express.json());
 
-// ============================================
-//  DEFINE RELATIONSHIPS (Added This Block)
-// ============================================
-// This tells the DB that a User "owns" Posts
-User.hasMany(Post, { onDelete: 'CASCADE' });
-Post.belongsTo(User);
-// ============================================
+// =======================
+// DATABASE RELATIONSHIPS
+// =======================
+User.hasMany(Post, {
+    foreignKey: 'userId',
+    onDelete: 'CASCADE'
+});
+Post.belongsTo(User, {
+    foreignKey: 'userId'
+});
 
-// 3. Routes
+// =======================
+// ROUTES
+// =======================
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/posts', postRoutes);
 
-// 4. Default Route
+// =======================
+// HEALTH CHECK
+// =======================
 app.get('/', (req, res) => {
-    res.send('Blog Backend is Running! Login with admin@admin.com / admin123');
+    res.send('🚀 Blog Backend is Running! Login → admin@admin.com / admin123');
 });
 
-// --- MAGIC ADMIN CREATOR ---
-// This function runs automatically to ensure an Admin always exists
+// =======================
+// DEFAULT ADMIN SEEDER
+// =======================
 const createDefaultAdmin = async () => {
     try {
         const adminEmail = 'admin@admin.com';
-        const existingAdmin = await User.findOne({ where: { email: adminEmail } });
 
-        if (!existingAdmin) {
-            console.log(">>> Creating Default Admin Account...");
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash('admin123', salt);
+        let admin = await User.findOne({ where: { email: adminEmail } });
+
+        if (!admin) {
+            console.log('>>> Creating Default Admin...');
+
+            const hashedPassword = await bcrypt.hash('admin123', 10);
 
             await User.create({
                 username: 'SuperAdmin',
                 email: adminEmail,
                 password: hashedPassword,
-                role: 'admin', // Forces Admin Role
-                can_create: true, can_edit: true, can_delete: true, can_read: true
+                role: 'admin',
+                can_create: true,
+                can_edit: true,
+                can_delete: true,
+                can_read: true
             });
-            console.log(">>> SUCCESS: Login with admin@admin.com / admin123");
+
+            console.log('>>> ADMIN CREATED → admin@admin.com / admin123');
         } else {
-            // If admin exists, force their role to be 'admin' just in case
-            if (existingAdmin.role !== 'admin') {
-                await existingAdmin.update({ role: 'admin', can_create: true, can_delete: true });
-                console.log(">>> FIXED: admin@admin.com role updated to ADMIN.");
-            }
+            // Force admin permissions (safety net)
+            await admin.update({
+                role: 'admin',
+                can_create: true,
+                can_edit: true,
+                can_delete: true,
+                can_read: true
+            });
+
+            console.log('>>> Admin verified & permissions synced');
         }
-    } catch (error) {
-        console.error(">>> Admin Seed Error:", error.message);
+    } catch (err) {
+        console.error('>>> Admin Seeder Error:', err.message);
     }
 };
-// ---------------------------
 
-// 5. Server Start
+// =======================
+// SERVER START
+// =======================
 const PORT = process.env.PORT || 3000;
 
-sequelize.sync({ alter: true }) 
+sequelize.sync({ alter: true })
     .then(async () => {
-        console.log("Database connected & synced successfully.");
-        
-        // Run the Magic Admin Creator
-        await createDefaultAdmin(); 
+        console.log('✅ Database connected & synced');
+
+        await createDefaultAdmin();
 
         app.listen(PORT, () => {
-            console.log(`Server is running on port ${PORT}`);
+            console.log(`🚀 Server running on port ${PORT}`);
         });
     })
     .catch((err) => {
-        console.error("Failed to connect to the database:", err.message);
+        console.error('❌ Database connection failed:', err.message);
     });
-

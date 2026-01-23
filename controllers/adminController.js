@@ -1,44 +1,79 @@
 const User = require('../models/User');
 
-// Get all users with their permissions
+// ===============================
+// GET ALL USERS (ADMIN)
+// ===============================
 exports.getAllUsers = async (req, res) => {
-    try {
-        const users = await User.findAll({ 
-            attributes: { exclude: ['password'] }, // Security: Never send passwords
-            order: [['id', 'ASC']] // Optional: Keeps the list sorted nicely
-        });
-        res.json(users);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+  try {
+    const users = await User.findAll({
+      attributes: { exclude: ['password'] }, // 🔐 never expose passwords
+      order: [['id', 'ASC']]
+    });
+
+    res.json(users);
+  } catch (err) {
+    console.error("GET USERS ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
 };
 
-// Admin updates user permissions
+// ===============================
+// UPDATE USER ROLE + PERMISSIONS (ADMIN)
+// ===============================
 exports.updateUserPermissions = async (req, res) => {
-    try {
-        const { userId } = req.params;
-        const { can_create, can_edit, can_delete, can_read, role } = req.body;
+  try {
+    const { userId } = req.params;
+    const { role, can_create, can_edit, can_delete, can_read } = req.body;
 
-        // Prevent an Admin from accidentally removing their OWN admin access
-        // (Assuming authMiddleware attaches req.user)
-        if (req.user && req.user.id == userId && role === 'user') {
-             return res.status(400).json({ message: "Safety Alert: You cannot remove your own Admin status!" });
-        }
-
-        // Perform the update
-        // Sequelize returns an array: [numberOfRowsUpdated]
-        const [updatedRows] = await User.update(
-            { can_create, can_edit, can_delete, can_read, role },
-            { where: { id: userId } }
-        );
-
-        // CHECK: Did we actually find and update a user?
-        if (updatedRows === 0) {
-            return res.status(404).json({ message: 'User not found or no changes made' });
-        }
-
-        res.json({ message: 'Permissions updated successfully' });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    // 1️⃣ Validate role
+    const allowedRoles = ['user', 'manager', 'admin'];
+    if (role && !allowedRoles.includes(role)) {
+      return res.status(400).json({ message: "Invalid role" });
     }
+
+    // 2️⃣ Find target user
+    const user = await User.findByPk(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 3️⃣ Prevent changing another admin
+    if (user.role === 'admin' && req.user.id !== user.id) {
+      return res.status(403).json({ message: "Cannot modify another admin" });
+    }
+
+    // 4️⃣ Prevent admin downgrading self
+    if (req.user.id === user.id && role === 'user') {
+      return res.status(400).json({
+        message: "Safety Alert: You cannot remove your own admin access"
+      });
+    }
+
+    // 5️⃣ Update fields (only if provided)
+    if (role !== undefined) user.role = role;
+    if (can_create !== undefined) user.can_create = can_create;
+    if (can_edit !== undefined) user.can_edit = can_edit;
+    if (can_delete !== undefined) user.can_delete = can_delete;
+    if (can_read !== undefined) user.can_read = can_read;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "User permissions updated successfully",
+      updatedUser: {
+        id: user.id,
+        role: user.role,
+        can_create: user.can_create,
+        can_edit: user.can_edit,
+        can_delete: user.can_delete,
+        can_read: user.can_read
+      }
+    });
+
+  } catch (err) {
+    console.error("UPDATE PERMISSIONS ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
 };

@@ -1,35 +1,46 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-exports.verifyToken = (req, res, next) => {
+exports.verifyToken = async (req, res, next) => {
     try {
-        // 1. Get the header (Handles both 'Authorization' and 'authorization')
-        const authHeader = req.header('Authorization');
+        let token;
 
-        // 2. Check if header exists
-        if (!authHeader) {
-            return res.status(401).json({ message: 'Access Denied: No Token Provided' });
+        // 1️⃣ Get token from Authorization header
+        if (
+            req.headers.authorization &&
+            req.headers.authorization.startsWith('Bearer ')
+        ) {
+            token = req.headers.authorization.split(' ')[1];
         }
 
-        // 3. Robust Extraction: Splits "Bearer <token>" and takes the second part
-        // This prevents issues if the "Bearer" casing is different or missing
-        const token = authHeader.startsWith('Bearer ') 
-            ? authHeader.slice(7, authHeader.length) 
-            : authHeader;
-
+        // 2️⃣ No token found
         if (!token) {
-            return res.status(401).json({ message: 'Access Denied: Malformed Token' });
+            return res.status(401).json({
+                message: 'Access denied: Token missing'
+            });
         }
 
-        // 4. Verify Token
-        const verified = jwt.verify(token, process.env.JWT_SECRET);
-        req.user = verified; // Attach user payload
+        // 3️⃣ Verify token
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        // 4️⃣ Fetch user from DB (latest role & permissions)
+        const user = await User.findByPk(decoded.id, {
+            attributes: { exclude: ['password'] }
+        });
+
+        if (!user) {
+            return res.status(401).json({
+                message: 'Access denied: User not found'
+            });
+        }
+
+        // 5️⃣ Attach user to request
+        req.user = user;
+
         next();
-
-    } catch (err) {
-        // 5. Better Error Handling
-        if (err.name === 'TokenExpiredError') {
-            return res.status(401).json({ message: 'Session Expired: Please Login Again' });
-        }
-        res.status(400).json({ message: 'Invalid Token' });
+    } catch (error) {
+        return res.status(401).json({
+            message: 'Access denied: Invalid or expired token'
+        });
     }
 };
