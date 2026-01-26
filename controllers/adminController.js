@@ -1,46 +1,36 @@
 const User = require('../models/User');
 
-/**
- * Controller 1: Get All Users
- * Fetches the user list for your Admin Dashboard.
- */
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.findAll({
-      attributes: { exclude: ['password'] }, // 🛡️ Security: Never send passwords
+      attributes: { exclude: ['password'] },
       order: [['id', 'ASC']]
     });
     res.json(users);
   } catch (err) {
-    console.error("GET_USERS_ERROR:", err.message);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-/**
- * Controller 2: Update User Permissions & Role
- * Saves to Neon PostgreSQL and triggers a real-time Socket.io emit.
- */
 exports.updateUserPermissions = async (req, res) => {
   try {
     const { userId } = req.params;
-    const permissions = req.body; // e.g., { role: 'user', can_edit: true }
+    const permissions = req.body; // e.g., { can_edit: true }
 
     const user = await User.findByPk(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // 🛡️ Security: Prevent modifying other admins or downgrading yourself
+    // 🛡️ Security: Prevent modifying other admins
     if (user.role === 'admin' && req.user.id !== user.id) {
       return res.status(403).json({ message: "Cannot modify another admin" });
     }
 
-    // Update the database record
+    // Save to Neon DB
     await user.update(permissions);
 
-    // 🚀 LEVEL 3: Emit the update so the UI changes instantly without refresh
-    const io = req.app.get("io"); // Get the socket instance from server.js
-    if (io) {
-      io.to(`user_${userId}`).emit("permissions-updated", {
+    // 🚀 LEVEL 3: Use global.io to push changes instantly
+    if (global.io) {
+      global.io.to(`user_${userId}`).emit("permissions-updated", {
         updatedPermissions: {
           role: user.role,
           can_create: user.can_create,
@@ -49,16 +39,11 @@ exports.updateUserPermissions = async (req, res) => {
           can_read: user.can_read
         }
       });
-      console.log(`📡 Real-time update pushed to room: user_${userId}`);
+      console.log(`📡 Real-time update pushed to User ${userId}`);
     }
 
-    res.json({ 
-      success: true, 
-      message: "Permissions updated and pushed live", 
-      user 
-    });
+    res.json({ success: true, user });
   } catch (err) {
-    console.error("UPDATE_PERMISSIONS_ERROR:", err.message);
     res.status(500).json({ message: "Update failed" });
   }
 };
