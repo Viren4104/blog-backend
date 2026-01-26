@@ -1,24 +1,14 @@
 const express = require('express');
 const router = express.Router();
+const { protect, checkPermission } = require('../middleware/authMiddleware'); // Verify this path!
+const postController = require('../controllers/postController');
 
-const { getAllPosts, createPost, updatePost, deletePost } = require('../controllers/postController');
-
-
-const { protect, checkPermission } = require('../middleware/authMiddleware');
-
-
-// POST ROUTES (/api/posts)
-
-// GET ALL POSTS (Public)
-router.get('/', getAllPosts);
-
-// CREATE POST (Protected - requires can_create)
-router.post('/', protect, checkPermission('can_create'), createPost);
-
-// EDIT POST (Protected - requires can_edit)
-router.put('/:postId', protect, checkPermission('can_edit'), updatePost);
-
-// DELETE POST (Protected - requires can_delete)
-router.delete('/:postId', protect, checkPermission('can_delete'), deletePost);
+// Example usage on line 16
+router.post(
+  '/', 
+  protect, 
+  checkPermission('can_create'), // This is where the error was happening
+  postController.createPost
+);
 
 module.exports = router;
