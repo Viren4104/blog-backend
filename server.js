@@ -15,57 +15,49 @@ const postRoutes = require('./routes/postRoutes');
 
 const app = express();
 
-/* 
+/* ======================
    MIDDLEWARE
- */
+====================== */
 app.use(cors({
-  origin: '*', // OK for now (lock later for frontend domain)
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], // ✅ PATCH added here!
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json());
 
-/* 
-   MODEL RELATIONSHIPS
- */
-User.hasMany(Post, {
-  foreignKey: 'userId',
-  onDelete: 'CASCADE'
-});
+/* ======================
+   MODEL RELATIONS
+====================== */
+User.hasMany(Post, { foreignKey: 'userId', onDelete: 'CASCADE' });
+Post.belongsTo(User, { foreignKey: 'userId' });
 
-Post.belongsTo(User, {
-  foreignKey: 'userId'
-});
-
-/* 
+/* ======================
    ROUTES
-*/
+====================== */
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/posts', postRoutes);
 
 app.get('/', (req, res) => {
-  res.send('🚀 Blog Backend Running! RBAC enabled.');
+  res.send('🚀 RBAC Backend Running');
 });
 
-/* 
-   ADMIN SEEDER
- */
+/* ======================
+   DEFAULT ADMIN SEED
+====================== */
 const createDefaultAdmin = async () => {
   try {
-    const adminEmail = 'admin@admin.com';
+    const email = 'admin@admin.com';
 
-    const adminExists = await User.findOne({
-      where: { email: adminEmail }
-    });
-
-    if (!adminExists) {
-      const hashedPassword = await bcrypt.hash('admin123', 10);
+    const exists = await User.findOne({ where: { email } });
+    if (!exists) {
+      const hash = await bcrypt.hash('admin123', 10);
 
       await User.create({
         username: 'SuperAdmin',
-        email: adminEmail,
-        password: hashedPassword,
+        email,
+        password: hash,
         role: 'admin',
         can_create: true,
         can_edit: true,
@@ -73,31 +65,25 @@ const createDefaultAdmin = async () => {
         can_read: true
       });
 
-      console.log('✅ Default admin created');
-    } else {
-      console.log('✅ Admin already exists');
+      console.log('✅ Default Admin Created');
     }
   } catch (err) {
-    console.error('❌ Admin Seeder Error:', err.message);
+    console.error('Seeder error:', err.message);
   }
 };
 
-/* ===============================
-   SERVER + DB START
-================================ */
+/* ======================
+   SERVER START
+====================== */
 const PORT = process.env.PORT || 3000;
-const isProd = process.env.NODE_ENV === 'production';
 
-sequelize
-  .sync({ alter: !isProd }) // ⚠️ alter ONLY in dev
+sequelize.sync()
   .then(async () => {
-    console.log('✅ Database synced');
+    console.log('✅ DB Connected');
     await createDefaultAdmin();
 
     app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
+      console.log(`🚀 Server running on ${PORT}`);
     });
   })
-  .catch(err => {
-    console.error('❌ Database connection failed:', err.message);
-  });
+  .catch(err => console.error(err));

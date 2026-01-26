@@ -1,25 +1,15 @@
-const express = require("express");
+const express = require('express');
 const router = express.Router();
- 
+
 const {
   getAllUsers,
-  updateUserPermissions,
-} = require("../controllers/adminController");
- 
-const { protect, adminOnly } = require("../middleware/authMiddleware");
- 
-
-// ADMIN ROUTES (/api/admin)
- 
-// GET ALL USERS
-router.get("/users", protect, adminOnly, getAllUsers);
- 
-// UPDATE USER ROLE & PERMISSIONS
-router.patch(
-  "/users/:userId/permissions",
-  protect,
-  adminOnly,
   updateUserPermissions
-);
- 
+} = require('../controllers/adminController');
+
+const { authenticate, isAdmin } = require('../middlewares/authMiddleware');
+
+// ✅ ALL handlers must be FUNCTIONS
+router.get('/users', authenticate, isAdmin, getAllUsers);
+router.patch('/users/:userId', authenticate, isAdmin, updateUserPermissions);
+
 module.exports = router;
