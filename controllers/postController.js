@@ -1,36 +1,25 @@
 const Post = require('../models/Post');
 
-/**
- * @desc Get all posts
- * @route GET /api/posts
- * @access Public
- */
+// Get all posts
 exports.getAllPosts = async (req, res) => {
     try {
-        // Fetches all listings from Neon DB, newest first
         const posts = await Post.findAll({ order: [['createdAt', 'DESC']] });
         res.json(posts);
     } catch (err) {
-        console.error("Fetch Posts Error:", err.message);
         res.status(500).json({ message: "Server error" });
     }
 };
 
-/**
- * @desc Create a property post
- * @route POST /api/posts
- * @access Protected (requires can_create or admin)
- */
+// Create a post
 exports.createPost = async (req, res) => {
     try {
         const { title, content } = req.body;
         
-        // 🛡️ RBAC Check: Validates permission attached by protect middleware
+        // Check if user has permission to create
         if (!req.user.can_create && req.user.role !== 'admin') {
-            return res.status(403).json({ message: "Access Denied: You do not have permission to create listings" });
+            return res.status(403).json({ message: "You don't have permission to create posts" });
         }
 
-        // Creates record and links it to the logged-in user (Viren/Admin)
         const post = await Post.create({ 
             title, 
             content, 
@@ -39,63 +28,52 @@ exports.createPost = async (req, res) => {
 
         res.status(201).json(post);
     } catch (err) {
-        console.error("Create Post Error:", err.message);
-        res.status(500).json({ message: "Error creating listing" });
+        res.status(500).json({ message: "Error creating post" });
     }
 };
 
-/**
- * @desc Update/Edit a post
- * @route PUT /api/posts/:postId
- * @access Protected (requires can_edit or admin)
- */
+// ✅ NEW: Update (Edit) a post
 exports.updatePost = async (req, res) => {
     try {
         const { postId } = req.params;
         const { title, content } = req.body;
 
-        // 🛡️ RBAC Check: Ensures the user has editing rights
+        // 1. Permission Check: Must have can_edit or be an admin
         if (!req.user.can_edit && req.user.role !== 'admin') {
-            return res.status(403).json({ message: "Access Denied: You do not have permission to edit" });
+            return res.status(403).json({ message: "You don't have permission to edit posts" });
         }
 
         const post = await Post.findByPk(postId);
-        if (!post) return res.status(404).json({ message: "Listing not found" });
+        if (!post) return res.status(404).json({ message: "Post not found" });
 
-        // Update fields only if they are provided in the request
+        // Update the post with new data
         post.title = title || post.title;
         post.content = content || post.content;
         await post.save();
 
         res.json({ success: true, post });
     } catch (err) {
-        console.error("Update Post Error:", err.message);
-        res.status(500).json({ message: "Error updating listing" });
+        res.status(500).json({ message: "Error updating post" });
     }
 };
 
-/**
- * @desc Delete a post
- * @route DELETE /api/posts/:postId
- * @access Protected (requires can_delete or admin)
- */
+// ✅ NEW: Delete a post
 exports.deletePost = async (req, res) => {
     try {
         const { postId } = req.params;
 
-        // 🛡️ RBAC Check: Only admins or users with delete permission
+        // 1. Permission Check: Must have can_delete or be an admin
         if (!req.user.can_delete && req.user.role !== 'admin') {
-            return res.status(403).json({ message: "Access Denied: You do not have permission to delete" });
+            return res.status(403).json({ message: "You don't have permission to delete posts" });
         }
 
         const post = await Post.findByPk(postId);
-        if (!post) return res.status(404).json({ message: "Listing not found" });
+        if (!post) return res.status(404).json({ message: "Post not found" });
 
-        await post.destroy(); // Remove from Neon DB
+        await post.destroy();
 
-        res.json({ success: true, message: "Listing deleted successfully" });
+        res.json({ success: true, message: "Post deleted successfully" });
     } catch (err) {
-        console.error("Delete Post Error:", err.message);
-        res.status(500).json({ message: "Error deleting listing" });
+        res.status(500).json({ message: "Error deleting post" });
     }
 };
