@@ -15,9 +15,9 @@ const postRoutes = require('./routes/postRoutes');
 
 const app = express();
 
-/* ===============================
+/* 
    MIDDLEWARE
-================================ */
+ */
 app.use(cors({
   origin: '*', // OK for now (lock later for frontend domain)
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'], // ✅ PATCH added here!
@@ -25,9 +25,9 @@ app.use(cors({
 }));
 app.use(express.json());
 
-/* ===============================
+/* 
    MODEL RELATIONSHIPS
-================================ */
+ */
 User.hasMany(Post, {
   foreignKey: 'userId',
   onDelete: 'CASCADE'
@@ -37,9 +37,9 @@ Post.belongsTo(User, {
   foreignKey: 'userId'
 });
 
-/* ===============================
+/* 
    ROUTES
-================================ */
+*/
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/posts', postRoutes);
@@ -48,9 +48,9 @@ app.get('/', (req, res) => {
   res.send('🚀 Blog Backend Running! RBAC enabled.');
 });
 
-/* ===============================
+/* 
    ADMIN SEEDER
-================================ */
+ */
 const createDefaultAdmin = async () => {
   try {
     const adminEmail = 'admin@admin.com';
