@@ -25,9 +25,9 @@ app.use(
       "http://localhost:1212", 
       "http://localhost:5173", 
       "http://localhost:3000",
-      process.env.FRONTEND_URL,
+      process.env.FRONTEND_URL, // Ensure this is set in Render Dashboard
     ],
-    credentials: true,
+    credentials: true, // Critical for session cookies
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -36,7 +36,7 @@ app.use(
 app.use(express.json());
 
 /* ===============================
-   SESSION CONFIG
+   SESSION CONFIG (NEON + PG STORE)
 ================================ */
 app.use(
   session({
@@ -51,18 +51,26 @@ app.use(
     secret: process.env.SESSION_SECRET || "viren_rbac_secret_key",
     resave: false,
     saveUninitialized: false,
+    proxy: true, // 🛡️ Needed because Render uses a reverse proxy
     cookie: {
-      maxAge: 1000 * 60 * 60 * 24,
+      maxAge: 1000 * 60 * 60 * 24, // 1 day
       httpOnly: true,
-      secure: isProd, 
-      sameSite: isProd ? "none" : "lax",
+      // 🛡️ SECURITY FIX FOR CROSS-SITE COOKIES
+      secure: true, 
+      sameSite: "none", 
     },
   })
 );
 
+/* ===============================
+   MODEL ASSOCIATIONS
+================================ */
 User.hasMany(Post, { foreignKey: "userId", onDelete: "CASCADE" });
 Post.belongsTo(User, { foreignKey: "userId" });
 
+/* ===============================
+   ROUTES
+================================ */
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/posts", postRoutes);
@@ -101,6 +109,9 @@ const createDefaultAdmin = async () => {
   }
 };
 
+/* ===============================
+   SERVER STARTUP
+================================ */
 const PORT = process.env.PORT || 3000;
 
 sequelize
