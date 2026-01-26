@@ -2,7 +2,6 @@ const express = require("express");
 const router = express.Router();
 
 // 🛡️ Import controllers and middleware
-// Ensure these names match the 'exports.name' in your files!
 const { 
   getAllUsers, 
   updateUserPermissions 
@@ -13,21 +12,30 @@ const {
   adminOnly 
 } = require("../middleware/authMiddleware");
 
+// 🔍 DEBUG CHECK: If any of these are false, your import is wrong
+console.log("Admin Imports Check:", {
+  protect: !!protect,
+  adminOnly: !!adminOnly,
+  getAllUsers: !!getAllUsers,
+  updateUserPermissions: !!updateUserPermissions
+});
+
 /* ===============================
-   ADMIN ROUTES
+    ADMIN ROUTES
 ================================ */
 
-// 1. GET ALL USERS
-// Logic: protect (is logged in?) -> adminOnly (is Viren/Admin?) -> controller
-router.get("/users", protect, adminOnly, getAllUsers);
+// Line 22: Ensure all handlers are actual functions
+if (protect && adminOnly && getAllUsers) {
+    router.get("/users", protect, adminOnly, getAllUsers);
+}
 
-// 2. UPDATE USER ROLE & PERMISSIONS
-// This triggers the Socket.io 'permissions-updated' event in the controller
-router.patch(
-  "/users/:userId/permissions",
-  protect,
-  adminOnly,
-  updateUserPermissions
-);
+if (protect && adminOnly && updateUserPermissions) {
+    router.patch(
+      "/users/:userId/permissions",
+      protect,
+      adminOnly,
+      updateUserPermissions
+    );
+}
 
 module.exports = router;

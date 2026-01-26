@@ -1,18 +1,22 @@
-// routes/authRoutes.js
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
 const { protect } = require('../middleware/authMiddleware');
 
-router.post('/register', authController.register);
-router.post('/login', authController.login);
+// 🔍 DEBUG: If these log as false on Render, your file path or naming is wrong
+console.log("Auth Controller Handlers:", {
+  register: !!authController.register,
+  login: !!authController.login,
+  logout: !!authController.logout
+});
 
-// ✅ NEW: Logout Route
-router.post('/logout', protect, authController.logout);
+// Use conditional registration to prevent the crash if a function is missing
+if (authController.register) router.post('/register', authController.register);
+if (authController.login) router.post('/login', authController.login);
+if (authController.logout) router.post('/logout', protect, authController.logout);
 
-// GET CURRENT USER (Protected)
 router.get("/me", protect, (req, res) => {
-  res.json(req.user); // req.user is already fetched in 'protect'
+  res.json(req.user); 
 });
 
 module.exports = router;
