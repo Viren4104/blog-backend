@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
 
-// 1. Import your controllers
+/**
+ * 🛠️ CONTROLLER IMPORT
+ * Ensure ../controllers/postController.js uses 'exports.name' for these functions.
+ */
 const { 
   getAllPosts, 
   createPost, 
@@ -9,20 +12,45 @@ const {
   deletePost 
 } = require('../controllers/postController');
 
-// 2. Import your verified middleware
+/**
+ * 🛡️ MIDDLEWARE IMPORT
+ * These handle JWT verification and RBAC boolean checks (can_create, etc.).
+ */
 const { protect, checkPermission } = require('../middleware/authMiddleware');
 
 /* ===============================
-    POST ROUTES
+    POST ROUTES (/api/posts)
 ================================ */
 
-// Public: Anyone can view listings
+// 1. Public: Anyone can view blog posts/listings
 router.get('/', getAllPosts);
 
-// Protected: Requires specific RBAC permissions
-router.post('/', protect, checkPermission('can_create'), createPost);
-router.put('/:postId', protect, checkPermission('can_edit'), updatePost);
-router.delete('/:postId', protect, checkPermission('can_delete'), deletePost);
+// 2. Protected: Requires valid JWT and 'can_create' permission
+router.post(
+  '/', 
+  protect, 
+  checkPermission('can_create'), 
+  createPost
+);
 
-// 🚨 CRITICAL FIX: Render cannot see the routes without this line
+// 3. Protected: Requires valid JWT and 'can_edit' permission
+router.put(
+  '/:postId', 
+  protect, 
+  checkPermission('can_edit'), 
+  updatePost
+);
+
+// 4. Protected: Requires valid JWT and 'can_delete' permission
+router.delete(
+  '/:postId', 
+  protect, 
+  checkPermission('can_delete'), 
+  deletePost
+);
+
+/**
+ * 🚨 CRITICAL FOR RENDER: 
+ * Without this export, server.js will see 'postRoutes' as UNDEFINED and crash.
+ */
 module.exports = router;
