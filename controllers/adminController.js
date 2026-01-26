@@ -1,72 +1,75 @@
 const User = require('../models/User');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-// Fetch all users for the admin dashboard
-exports.getAllUsers = async (req, res) => {
+// 1. REGISTER
+exports.register = async (req, res) => {
   try {
-    const users = await User.findAll({
-      attributes: { exclude: ['password'] },
-      order: [['id', 'ASC']]
+    const { username, email, password } = req.body;
+
+    // Check if user exists in Neon DB
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) return res.status(400).json({ message: "User already exists" });
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create user
+    const user = await User.create({
+      username,
+      email,
+      password: hashedPassword,
+      role: 'user' // Default role
     });
-    res.json(users);
+
+    res.status(201).json({ success: true, message: "User registered successfully" });
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: "Registration failed", error: err.message });
   }
 };
 
-// Update permissions and refresh the admin token
-exports.updateUserPermissions = async (req, res) => {
+// 2. LOGIN
+exports.login = async (req, res) => {
   try {
-    const { userId } = req.params;
-    const permissions = req.body; 
+    const { email, password } = req.body;
 
-    const user = await User.findByPk(userId);
+    // Find user
+    const user = await User.findOne({ where: { email } });
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // Security: Prevent modifying other admins
-    if (user.role === 'admin' && req.user.id !== parseInt(userId)) {
-      return res.status(403).json({ message: "Cannot modify another admin" });
-    }
+    // Verify password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ message: "Invalid credentials" });
 
-    // 1. Update Neon PostgreSQL record
-    await user.update(permissions);
+    // Generate JWT (This is what stays in localStorage)
+    const token = jwt.sign(
+      { 
+        id: user.id, 
+        role: user.role,
+        can_edit: user.can_edit,
+        can_create: user.can_create 
+      },
+      process.env.JWT_SECRET,
+      { expiresIn: '1d' }
+    );
 
-    // 2. THE FIX: Create a fresh token if the admin updated THEMSELVES
-    let newToken = null;
-    if (req.user.id === parseInt(userId)) {
-      newToken = jwt.sign(
-        { 
-          id: user.id, 
-          role: user.role,
-          can_edit: user.can_edit,
-          can_create: user.can_create 
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: '1d' }
-      );
-    }
-
-    // 3. Real-time push via Socket.io
-    if (global.io) {
-      global.io.to(`user_${userId}`).emit("permissions-updated", {
-        updatedPermissions: {
-          role: user.role,
-          can_create: user.can_create,
-          can_edit: user.can_edit,
-          can_delete: user.can_delete,
-          can_read: user.can_read
-        },
-        token: newToken 
-      });
-    }
-
-    res.json({ 
-      success: true, 
-      message: "Permissions updated",
-      token: newToken // Frontend must swap the old token with this one
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role
+      }
     });
-
   } catch (err) {
-    res.status(500).json({ message: "Update failed" });
+    res.status(500).json({ message: "Login failed" });
   }
+};
+
+// 3. LOGOUT
+exports.logout = async (req, res) => {
+  // With stateless JWT, logout is mostly handled by the frontend 
+  // by deleting the token from localStorage.
+  res.json({ message: "Logged out successfully. Please clear your token on the client side." });
 };
