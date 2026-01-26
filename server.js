@@ -1,4 +1,3 @@
-// server.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -23,12 +22,12 @@ const isProd = process.env.NODE_ENV === "production";
 app.use(
   cors({
     origin: [
-      "http://localhost:1212", // Fixes error in image_0037e1.png
-      "http://localhost:5173", // Fixes error in image_002fc6.png
+      "http://localhost:1212", 
+      "http://localhost:5173", 
       "http://localhost:3000",
-      process.env.FRONTEND_URL, // For your live Render deployment
+      process.env.FRONTEND_URL,
     ],
-    credentials: true, // MUST be true for sessions to work
+    credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -37,7 +36,7 @@ app.use(
 app.use(express.json());
 
 /* ===============================
-   SESSION CONFIGURATION
+   SESSION CONFIG
 ================================ */
 app.use(
   session({
@@ -53,29 +52,23 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      maxAge: 1000 * 60 * 60 * 24, // 1 Day
+      maxAge: 1000 * 60 * 60 * 24,
       httpOnly: true,
-      secure: isProd, // true on Render (HTTPS), false on Localhost
+      secure: isProd, 
       sameSite: isProd ? "none" : "lax",
     },
   })
 );
 
-/* ===============================
-   MODEL RELATIONSHIPS
-================================ */
 User.hasMany(Post, { foreignKey: "userId", onDelete: "CASCADE" });
 Post.belongsTo(User, { foreignKey: "userId" });
 
-/* ===============================
-   ROUTES
-================================ */
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/posts", postRoutes);
 
 app.get("/", (req, res) => {
-  res.send("🚀 Real Estate RBAC Backend Running with Sessions");
+  res.send("🚀 Real Estate RBAC Backend Running");
 });
 
 /* ===============================
@@ -108,15 +101,12 @@ const createDefaultAdmin = async () => {
   }
 };
 
-/* ===============================
-   SERVER + DB START
-================================ */
 const PORT = process.env.PORT || 3000;
 
 sequelize
   .sync({ alter: !isProd })
   .then(async () => {
-    console.log("✅ Database connected & synchronized");
+    console.log("✅ Database connected");
     await createDefaultAdmin();
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);

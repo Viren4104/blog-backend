@@ -1,3 +1,4 @@
+// middleware/authMiddleware.js
 const User = require("../models/User");
 
 // ===============================
@@ -5,11 +6,12 @@ const User = require("../models/User");
 // ===============================
 exports.protect = async (req, res, next) => {
   try {
-    // ✅ FIX: Using req.session.userId to match your login controller
+    // Check if session exists and contains the userId set during login
     if (!req.session || !req.session.userId) {
       return res.status(401).json({ message: "Unauthorized: No active session" });
     }
 
+    // Fetch user from PostgreSQL (excluding sensitive password field)
     const user = await User.findByPk(req.session.userId, {
       attributes: { exclude: ["password"] },
     });
@@ -18,6 +20,7 @@ exports.protect = async (req, res, next) => {
       return res.status(401).json({ message: "User no longer exists" });
     }
 
+    // Attach user to the request object for use in subsequent middleware/controllers
     req.user = user;
     next();
   } catch (err) {
@@ -30,6 +33,7 @@ exports.protect = async (req, res, next) => {
 // 2. ADMIN ONLY ACCESS
 // ===============================
 exports.adminOnly = (req, res, next) => {
+  // Ensure the user attached in 'protect' has the admin role
   if (!req.user || req.user.role !== "admin") {
     return res.status(403).json({ message: "Admin access only" });
   }
@@ -37,7 +41,7 @@ exports.adminOnly = (req, res, next) => {
 };
 
 // ===============================
-// 3. CHECK SPECIFIC PERMISSION
+// 3. granural PERMISSION CHECK
 // ===============================
 exports.checkPermission = (permission) => {
   return async (req, res, next) => {
@@ -57,13 +61,12 @@ exports.checkPermission = (permission) => {
         return res.status(400).json({ message: "Invalid permission check" });
       }
 
-      // Master Access: Admins bypass permission flags
+      // Master Access: Admins bypass individual permission flags
       if (req.user.role === "admin") return next();
       
-      // Check granular permission
+      // Check for specific boolean permission flag on the user model
       if (req.user[permission] === true) return next();
 
-      // ✅ FIX: Added missing backticks for the template literal
       return res.status(403).json({
         message: `Access Denied: Missing permission (${permission})`,
       });
