@@ -5,7 +5,7 @@ const http = require("http");
 const { Server } = require("socket.io"); 
 const sequelize = require("./config/db");
 
-// Import Models
+// Import Models for associations
 const User = require("./models/User");
 const Post = require("./models/Post");
 
@@ -27,6 +27,7 @@ const server = http.createServer(app);
 /* ===============================
     CORS CONFIGURATION
 ================================ */
+// Explicitly list origins to avoid wildcard errors when using credentials
 const allowedOrigins = [
   "http://localhost:1212", // Your local Blogging App port
   "http://localhost:5173", 
@@ -36,7 +37,7 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps) or matching origins
+    // Allow requests with no origin (like mobile apps) or matching allowed origins
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -60,11 +61,19 @@ const io = new Server(server, {
   }
 });
 
-global.io = io; // Access 'io' in controllers for real-time updates
+// Make 'io' global to trigger real-time updates from your controllers
+global.io = io; 
 
 io.on("connection", (socket) => {
   console.log("🟢 Client connected:", socket.id);
-  socket.on("join_room", (userId) => socket.join(`user_${userId}`));
+  
+  // Join a private room for targeted permission/data syncs
+  socket.on("join_room", (userId) => {
+    socket.join(`user_${userId}`);
+    console.log(`👤 User ${userId} joined room user_${userId}`);
+  });
+
+  socket.on("disconnect", () => console.log("🔴 Client disconnected"));
 });
 
 /* ===============================
@@ -76,16 +85,23 @@ Post.belongsTo(User, { foreignKey: "userId" });
 /* ===============================
     ROUTES
 ================================ */
+// Safety checks prevent the server from crashing if a route file fails to load
 if (typeof authRoutes === 'function') app.use("/api/auth", authRoutes);
 if (typeof adminRoutes === 'function') app.use("/api/admin", adminRoutes);
 if (typeof postRoutes === 'function') app.use("/api/posts", postRoutes);
 
-app.get("/", (req, res) => res.send("🚀 Blog Backend Running"));
+app.get("/", (req, res) => res.send("🚀 Blogging App Backend Running"));
 
 /* ===============================
-    STARTUP
+    STARTUP & DB SYNC
 ================================ */
 const PORT = process.env.PORT || 5000;
+
 sequelize.sync({ alter: !isProd }).then(() => {
-  server.listen(PORT, () => console.log(`🚀 Server on port ${PORT}`));
-}).catch(err => console.error("❌ DB Error:", err.message));
+  console.log("✅ Neon PostgreSQL Database connected");
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running in ${isProd ? 'production' : 'development'} mode on port ${PORT}`);
+  });
+}).catch(err => {
+  console.error("❌ Database connection failed:", err.message);
+});
