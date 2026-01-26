@@ -1,30 +1,24 @@
+// controllers/authController.js
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
 
 exports.register = async (req, res) => {
     try {
         const { username, email, password } = req.body;
         
-        // 1. CHECK: Does this email already exist?
         const existingUser = await User.findOne({ where: { email } });
-        if (existingUser) {
-            return res.status(400).json({ message: "User already exists with this email" });
-        }
+        if (existingUser) return res.status(400).json({ message: "User already exists" });
 
-        // 2. Hash password
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+        const hashedPassword = await bcrypt.hash(password, 10);
 
-        // 3. Create User
         const newUser = await User.create({
-            username, 
-            email, 
-            password: hashedPassword 
-            // Role defaults to 'user' automatically via the Model
+            username, email, password: hashedPassword
         });
 
-        res.status(201).json({ message: 'User registered successfully', userId: newUser.id });
+        // ✅ NEW: Log user in immediately upon registration
+        req.session.userId = newUser.id;
+
+        res.status(201).json({ message: 'Registered successfully', role: newUser.role });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -35,27 +29,29 @@ exports.login = async (req, res) => {
         const { email, password } = req.body;
         const user = await User.findOne({ where: { email } });
         
-        // 1. Check User
         if (!user) return res.status(404).json({ message: 'User not found' });
 
-        // 2. Check Password
         const validPass = await bcrypt.compare(password, user.password);
         if (!validPass) return res.status(400).json({ message: 'Invalid credentials' });
 
-        // 3. Generate Token (Added 'expiresIn' for security)
-        const token = jwt.sign(
-            { id: user.id, role: user.role }, 
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' } // Token expires in 1 day (Good practice)
-        );
+        // ✅ NEW: Create the Session
+        req.session.userId = user.id;
 
-        // 4. Send Response
         res.json({ 
-            token, 
+            message: 'Logged in successfully',
             role: user.role, 
             redirectTo: user.role === 'admin' ? '/admin-dashboard' : '/user-dashboard' 
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
+};
+
+// ✅ NEW: Logout Controller
+exports.logout = (req, res) => {
+    req.session.destroy((err) => {
+        if (err) return res.status(500).json({ message: 'Could not log out.' });
+        res.clearCookie('connect.sid'); // Clears the browser cookie
+        res.json({ message: 'Logged out successfully' });
+    });
 };

@@ -1,9 +1,8 @@
 const User = require('../models/User');
 
-// ===============================
 // CHECK SPECIFIC PERMISSION
 // Usage: checkPermission('can_create')
-// ===============================
+
 exports.checkPermission = (permission) => {
   return async (req, res, next) => {
     try {

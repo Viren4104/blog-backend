@@ -3,12 +3,11 @@ const router = express.Router();
 
 const { getAllPosts, createPost, updatePost, deletePost } = require('../controllers/postController');
 
-// ✅ FIX: Imported checkPermission
+
 const { protect, checkPermission } = require('../middleware/authMiddleware');
 
-// ==========================================
+
 // POST ROUTES (/api/posts)
-// ==========================================
 
 // GET ALL POSTS (Public)
 router.get('/', getAllPosts);
