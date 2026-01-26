@@ -3,7 +3,7 @@ const router = express.Router();
 
 /**
  * 🛠️ CONTROLLER IMPORT
- * Ensure ../controllers/postController.js uses 'exports.name' for these functions.
+ * These functions must be exported using 'exports.name' in postController.js.
  */
 const { 
   getAllPosts, 
@@ -14,7 +14,7 @@ const {
 
 /**
  * 🛡️ MIDDLEWARE IMPORT
- * These handle JWT verification and RBAC boolean checks (can_create, etc.).
+ * 'protect' verifies the JWT; 'checkPermission' validates boolean flags (can_create, etc.).
  */
 const { protect, checkPermission } = require('../middleware/authMiddleware');
 
@@ -22,10 +22,10 @@ const { protect, checkPermission } = require('../middleware/authMiddleware');
     POST ROUTES (/api/posts)
 ================================ */
 
-// 1. Public: Anyone can view blog posts/listings
+// 1. Public: Anyone can view blog posts
 router.get('/', getAllPosts);
 
-// 2. Protected: Requires valid JWT and 'can_create' permission
+// 2. Protected: Requires 'can_create' permission or 'admin' role
 router.post(
   '/', 
   protect, 
@@ -33,7 +33,7 @@ router.post(
   createPost
 );
 
-// 3. Protected: Requires valid JWT and 'can_edit' permission
+// 3. Protected: Requires 'can_edit' permission or 'admin' role
 router.put(
   '/:postId', 
   protect, 
@@ -41,7 +41,7 @@ router.put(
   updatePost
 );
 
-// 4. Protected: Requires valid JWT and 'can_delete' permission
+// 4. Protected: Requires 'can_delete' permission or 'admin' role
 router.delete(
   '/:postId', 
   protect, 
@@ -51,6 +51,6 @@ router.delete(
 
 /**
  * 🚨 CRITICAL FOR RENDER: 
- * Without this export, server.js will see 'postRoutes' as UNDEFINED and crash.
+ * This export allows server.js to import the router correctly.
  */
 module.exports = router;
