@@ -3,6 +3,8 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcryptjs");
+
+// SESSION & DB PACKAGES
 const session = require("express-session");
 const pgSession = require("connect-pg-simple")(session);
 
@@ -23,12 +25,12 @@ const isProd = process.env.NODE_ENV === "production";
 app.use(
   cors({
     origin: [
-      "http://localhost:1212", // Fixes error in image_0037e1.png
-      "http://localhost:5173", // Fixes error in image_002fc6.png
+      "http://localhost:1212", // From your current development console
+      "http://localhost:5173", // Standard Vite port
       "http://localhost:3000",
-      process.env.FRONTEND_URL, // For your live Render deployment
+      process.env.FRONTEND_URL, // Your live Render URL
     ],
-    credentials: true, // Must be true for session cookies
+    credentials: true, // REQUIRED: Allows cookies/sessions to work across origins
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -44,19 +46,19 @@ app.use(
     store: new pgSession({
       conObject: {
         connectionString: `postgres://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
-        ssl: { rejectUnauthorized: false },
+        ssl: { rejectUnauthorized: false }, // Required for Neon.tech
       },
-      tableName: "session",
+      tableName: "session", // Table found in your Neon dashboard
     }),
-    name: "seaneb.sid",
+    name: "seaneb.sid", // Custom cookie name
     secret: process.env.SESSION_SECRET || "viren_rbac_secret_key",
     resave: false,
     saveUninitialized: false,
     cookie: {
       maxAge: 1000 * 60 * 60 * 24, // 1 Day
-      httpOnly: true,
-      secure: isProd, // true on Render (HTTPS), false on Localhost
-      sameSite: isProd ? "none" : "lax",
+      httpOnly: true, // Prevents XSS script access to the cookie
+      secure: isProd, // Must be true on Render (HTTPS), false on Localhost
+      sameSite: isProd ? "none" : "lax", // 'none' required for cross-site cookies on Render
     },
   })
 );
@@ -84,8 +86,16 @@ app.get("/", (req, res) => {
 const createDefaultAdmin = async () => {
   try {
     const staticAdmins = [
-      { username: "SuperAdmin", email: "admin@admin.com", password: "admin123" },
-      { username: "Viren", email: "viren@test.com", password: "viren_secure_password" },
+      { 
+        username: "SuperAdmin", 
+        email: "admin@admin.com", 
+        password: "admin123" 
+      },
+      { 
+        username: "Viren", 
+        email: "viren@test.com", 
+        password: "viren_secure_password" // Update this as needed
+      },
     ];
 
     for (const adminData of staticAdmins) {
@@ -98,7 +108,10 @@ const createDefaultAdmin = async () => {
           email: adminData.email,
           password: hashedPassword,
           role: "admin",
-          can_create: true, can_edit: true, can_delete: true, can_read: true,
+          can_create: true,
+          can_edit: true,
+          can_delete: true,
+          can_read: true,
         });
         console.log(`✅ Static admin created: ${adminData.email}`);
       }
@@ -114,7 +127,7 @@ const createDefaultAdmin = async () => {
 const PORT = process.env.PORT || 3000;
 
 sequelize
-  .sync({ alter: !isProd })
+  .sync({ alter: !isProd }) // Only alters schema in development mode
   .then(async () => {
     console.log("✅ Database connected & synchronized");
     await createDefaultAdmin();
