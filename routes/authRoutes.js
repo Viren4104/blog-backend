@@ -1,25 +1,42 @@
 const express = require('express');
 const router = express.Router();
 
-const {
-  register,
-  login,
-  getProfile
-} = require('../controllers/authController');
+const authController = require('../controllers/authController');
+const { protect } = require('../middleware/authMiddleware'); // Import your auth middleware
+const User = require('../models/User'); // Import your User model
 
-const { protect } = require('../middleware/authMiddleware');
+// ==========================================================
+// AUTH ROUTES
+// ==========================================================
 
-// ===============================
-// AUTH ROUTES (/api/auth)
-// ===============================
+// REGISTER USER
+// POST /api/auth/register
+router.post('/register', authController.register);
 
-// Register
-router.post('/register', register);
+// LOGIN USER
+// POST /api/auth/login
+router.post('/login', authController.login);
 
-// Login
-router.post('/login', login);
-
-// Get logged-in user profile
-router.get('/me', protect, getProfile);
+// ==========================================================
+// GET CURRENT USER (LIVE DB DATA)
+// GET /api/auth/me
+// ==========================================================
+router.get("/me", protect, async (req, res) => {
+  try {
+    // req.user.id comes from the 'protect' middleware
+    const user = await User.findByPk(req.user.id, {
+      attributes: { exclude: ["password"] }, // Don't send the password back!
+    });
+ 
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+ 
+    res.json(user);
+  } catch (err) {
+    console.error("AUTH ME ERROR:", err);
+    res.status(500).json({ message: "Failed to fetch user" });
+  }
+});
 
 module.exports = router;
