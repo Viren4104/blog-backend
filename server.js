@@ -1,3 +1,4 @@
+// server.js
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -14,7 +15,7 @@ const adminRoutes = require("./routes/adminRoutes");
 const postRoutes = require("./routes/postRoutes");
 
 const app = express();
-const isProd = process.env.NODE_ENV === "production"; // ✅ Define this early
+const isProd = process.env.NODE_ENV === "production";
 
 /* ===============================
    MIDDLEWARE & CORS
@@ -22,12 +23,12 @@ const isProd = process.env.NODE_ENV === "production"; // ✅ Define this early
 app.use(
   cors({
     origin: [
-      "http://localhost:1212",
-      "http://localhost:5173",
+      "http://localhost:1212", // From your console screenshots
+      "http://localhost:5173", // Standard Vite port
       "http://localhost:3000",
-      process.env.FRONTEND_URL,
+      process.env.FRONTEND_URL, // Your live Render URL
     ],
-    credentials: true, // Required for sessions
+    credentials: true, // Required for session cookies to work
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -36,54 +37,63 @@ app.use(
 app.use(express.json());
 
 /* ===============================
-   SESSION CONFIG
+   SESSION CONFIGURATION
 ================================ */
 app.use(
   session({
     store: new pgSession({
       conObject: {
-        // ✅ FIX 1: Added backticks for the template literal
         connectionString: `postgres://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
-        ssl: { rejectUnauthorized: false },
+        ssl: { rejectUnauthorized: false }, // Required for Neon
       },
-      tableName: "session",
+      tableName: "session", // Table you created in Neon
     }),
     name: "seaneb.sid",
     secret: process.env.SESSION_SECRET || "viren_rbac_secret_key",
     resave: false,
     saveUninitialized: false,
     cookie: {
-      maxAge: 1000 * 60 * 60 * 24, // ✅ FIX 2: Added missing '*'
-      httpOnly: true,
-      // ✅ FIX 3: Dynamic security settings
-      secure: isProd, // Must be true on Render, false on Localhost
-      sameSite: isProd ? "none" : "lax", // "none" requires "secure: true"
+      maxAge: 1000 * 60 * 60 * 24, // 1 Day
+      httpOnly: true, // Shields against XSS
+      secure: isProd, // true on Render (HTTPS), false on Localhost
+      sameSite: isProd ? "none" : "lax", // 'none' for cross-site cookies on Render
     },
   })
 );
 
 /* ===============================
-   RELATIONSHIPS & ROUTES
+   MODEL RELATIONSHIPS
 ================================ */
 User.hasMany(Post, { foreignKey: "userId", onDelete: "CASCADE" });
 Post.belongsTo(User, { foreignKey: "userId" });
 
+/* ===============================
+   ROUTES
+================================ */
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/posts", postRoutes);
 
 app.get("/", (req, res) => {
-  res.send("RBAC Backend Running with Sessions");
+  res.send("🚀 Real Estate RBAC Backend Running with Sessions");
 });
 
 /* ===============================
-   ADMIN SEEDER
+   STATIC ADMIN SEEDER
 ================================ */
 const createDefaultAdmin = async () => {
   try {
     const staticAdmins = [
-      { username: "SuperAdmin", email: "admin@admin.com", password: "admin123" },
-      { username: "Viren", email: "viren@test.com", password: "viren_secure_password" },
+      { 
+        username: "SuperAdmin", 
+        email: "admin@admin.com", 
+        password: "admin123" 
+      },
+      { 
+        username: "Viren", 
+        email: "viren@test.com", 
+        password: "viren_secure_password" 
+      },
     ];
 
     for (const adminData of staticAdmins) {
@@ -96,7 +106,10 @@ const createDefaultAdmin = async () => {
           email: adminData.email,
           password: hashedPassword,
           role: "admin",
-          can_create: true, can_edit: true, can_delete: true, can_read: true,
+          can_create: true,
+          can_edit: true,
+          can_delete: true,
+          can_read: true,
         });
         console.log(`✅ Static admin created: ${adminData.email}`);
       }
@@ -112,9 +125,9 @@ const createDefaultAdmin = async () => {
 const PORT = process.env.PORT || 3000;
 
 sequelize
-  .sync({ alter: !isProd })
+  .sync({ alter: !isProd }) // Only alters schema in development
   .then(async () => {
-    console.log("✅ Database connected");
+    console.log("✅ Database connected & synchronized");
     await createDefaultAdmin();
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
