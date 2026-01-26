@@ -4,6 +4,8 @@ const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const session = require("express-session");
 const pgSession = require("connect-pg-simple")(session);
+const http = require("http"); // 🚀 Required for Socket.io
+const { Server } = require("socket.io"); // 🚀 Real-time engine
 
 const sequelize = require("./config/db");
 const User = require("./models/User");
@@ -16,6 +18,9 @@ const postRoutes = require("./routes/postRoutes");
 const app = express();
 const isProd = process.env.NODE_ENV === "production";
 
+// Create the HTTP server to wrap the Express app
+const server = http.createServer(app);
+
 /* ===============================
    MIDDLEWARE & CORS
 ================================ */
@@ -25,15 +30,40 @@ app.use(
       "http://localhost:1212", 
       "http://localhost:5173", 
       "http://localhost:3000",
-      process.env.FRONTEND_URL, // Ensure this is set in Render Dashboard
+      process.env.FRONTEND_URL, 
     ],
-    credentials: true, // Critical for session cookies
+    credentials: true, 
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
 );
 
 app.use(express.json());
+
+/* ===============================
+   SOCKET.IO INITIALIZATION
+================================ */
+const io = new Server(server, {
+  cors: {
+    origin: ["http://localhost:1212", "http://localhost:5173", process.env.FRONTEND_URL],
+    credentials: true
+  }
+});
+
+// Make 'io' global so you can call it inside your controllers
+global.io = io;
+
+io.on("connection", (socket) => {
+  console.log("🟢 Real-time client connected:", socket.id);
+
+  // Users join a "room" based on their ID for targeted updates
+  socket.on("join_room", (userId) => {
+    socket.join(`user_${userId}`);
+    console.log(`👤 User ${userId} joined their private sync room`);
+  });
+
+  socket.on("disconnect", () => console.log("🔴 Client disconnected"));
+});
 
 /* ===============================
    SESSION CONFIG (NEON + PG STORE)
@@ -51,11 +81,10 @@ app.use(
     secret: process.env.SESSION_SECRET || "viren_rbac_secret_key",
     resave: false,
     saveUninitialized: false,
-    proxy: true, // 🛡️ Needed because Render uses a reverse proxy
+    proxy: true, 
     cookie: {
-      maxAge: 1000 * 60 * 60 * 24, // 1 day
+      maxAge: 1000 * 60 * 60 * 24, 
       httpOnly: true,
-      // 🛡️ SECURITY FIX FOR CROSS-SITE COOKIES
       secure: true, 
       sameSite: "none", 
     },
@@ -76,7 +105,7 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/posts", postRoutes);
 
 app.get("/", (req, res) => {
-  res.send("🚀 Real Estate RBAC Backend Running");
+  res.send("🚀 Real Estate RBAC Real-Time Backend Running");
 });
 
 /* ===============================
@@ -86,7 +115,6 @@ const createDefaultAdmin = async () => {
   try {
     const staticAdmins = [
       { username: "SuperAdmin", email: "admin@admin.com", password: "admin123" },
-     
     ];
 
     for (const adminData of staticAdmins) {
@@ -119,8 +147,9 @@ sequelize
   .then(async () => {
     console.log("✅ Database connected");
     await createDefaultAdmin();
-    app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
+    // 🛡️ CRITICAL: Listen on 'server', not 'app' for Sockets to work!
+    server.listen(PORT, () => {
+      console.log(`🚀 Real-time server running on port ${PORT}`);
     });
   })
   .catch((err) => {
