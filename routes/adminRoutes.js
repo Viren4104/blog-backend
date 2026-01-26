@@ -1,3 +1,4 @@
+
 const express = require("express");
 const router = express.Router();
  
@@ -8,14 +9,8 @@ const {
  
 const { protect, adminOnly } = require("../middleware/authMiddleware");
  
-
-// ADMIN ROUTES (/api/admin)
-
- 
-// GET ALL USERS
 router.get("/users", protect, adminOnly, getAllUsers);
  
-// UPDATE USER ROLE & PERMISSION
 router.patch(
   "/users/:userId/permissions",
   protect,
@@ -23,4 +18,3 @@ router.patch(
   updateUserPermissions
 );
  
-module.exports = router;
