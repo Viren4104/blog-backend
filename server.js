@@ -86,7 +86,7 @@ const createDefaultAdmin = async () => {
   try {
     const staticAdmins = [
       { username: "SuperAdmin", email: "admin@admin.com", password: "admin123" },
-      { username: "Viren", email: "viren@test.com", password: "viren_secure_password" },
+     
     ];
 
     for (const adminData of staticAdmins) {
