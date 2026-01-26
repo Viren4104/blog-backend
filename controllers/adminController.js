@@ -1,56 +1,39 @@
-const User = require("../models/User");
 const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
-// ✅ Ensure this name matches the import in adminRoutes.js
-exports.getAllUsers = async (req, res) => {
+exports.protect = async (req, res, next) => {
   try {
-    const users = await User.findAll({
-      attributes: { exclude: ["password"] },
-      order: [["id", "ASC"]],
-    });
-    res.json(users);
+    let token;
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+      token = req.headers.authorization.split(" ")[1];
+    }
+
+    if (!token) return res.status(401).json({ message: "No token provided" });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findByPk(decoded.id, { attributes: { exclude: ["password"] } });
+
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    req.user = user;
+    next();
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    res.status(401).json({ message: "Invalid token" });
   }
 };
 
-// ✅ Ensure this name matches the import in adminRoutes.js
-exports.updateUserPermissions = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const permissions = req.body;
-
-    const user = await User.findByPk(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    // 🛡️ Security: Prevent modifying other admins
-    if (user.role === "admin" && req.user.id !== parseInt(userId)) {
-      return res.status(403).json({ message: "Cannot modify another admin" });
-    }
-
-    // Update Neon PostgreSQL record
-    await user.update(permissions);
-
-    // 🚀 THE FIX: Generate new JWT if admin updated themselves
-    let newToken = null;
-    if (req.user.id === parseInt(userId)) {
-      newToken = jwt.sign(
-        { id: user.id, role: user.role },
-        process.env.JWT_SECRET,
-        { expiresIn: "1d" }
-      );
-    }
-
-    // 📡 Real-time update via Socket.io
-    if (global.io) {
-      global.io.to(`user_${userId}`).emit("permissions-updated", {
-        updatedPermissions: user,
-        token: newToken,
-      });
-    }
-
-    res.json({ success: true, token: newToken });
-  } catch (err) {
-    res.status(500).json({ message: "Update failed" });
+// 🛡️ FIX: Ensure this is explicitly exported
+exports.adminOnly = (req, res, next) => {
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({ message: "Admin access only" });
   }
+  next();
+};
+
+exports.checkPermission = (permission) => {
+  return (req, res, next) => {
+    if (req.user.role === "admin") return next();
+    if (req.user[permission] === true) return next();
+    return res.status(403).json({ message: `Missing ${permission}` });
+  };
 };
