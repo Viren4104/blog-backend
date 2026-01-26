@@ -1,8 +1,7 @@
-// middleware/authMiddleware.js
 const User = require("../models/User");
 
 // ===============================
-// 1. VERIFY SESSION & ATTACH USER
+// 1. PROTECT: Verify Session & Fetch Fresh Data
 // ===============================
 exports.protect = async (req, res, next) => {
   try {
@@ -11,8 +10,8 @@ exports.protect = async (req, res, next) => {
       return res.status(401).json({ message: "Unauthorized: No active session" });
     }
 
-    // Fetch latest user data from PostgreSQL (excluding password)
-    // This ensures permission changes take effect immediately
+    // 🚀 THE NO-REFRESH FIX: Fetch fresh user data from the DB on every request.
+    // This ensures permissions like 'can_edit' update live if changed by an admin.
     const user = await User.findByPk(req.session.userId, {
       attributes: { exclude: ["password"] },
     });
@@ -21,7 +20,7 @@ exports.protect = async (req, res, next) => {
       return res.status(401).json({ message: "User no longer exists" });
     }
 
-    // Attach user to the request object for use in controllers
+    // Attach fresh user object to the request for use in controllers
     req.user = user;
     next();
   } catch (err) {
@@ -31,18 +30,18 @@ exports.protect = async (req, res, next) => {
 };
 
 // ===============================
-// 2. ADMIN ONLY ACCESS
+// 2. ADMIN ONLY: Restrict to SuperAdmin/Viren
 // ===============================
 exports.adminOnly = (req, res, next) => {
-  // Ensure the user exists and has the 'admin' role
+  // Ensure the user exists (from protect) and has the 'admin' role
   if (!req.user || req.user.role !== "admin") {
-    return res.status(403).json({ message: "Admin access only" });
+    return res.status(403).json({ message: "Access Denied: Admin access only" });
   }
   next();
 };
 
 // ===============================
-// 3. GRANULAR PERMISSION CHECK
+// 3. CHECK PERMISSION: Granular Access Control
 // ===============================
 exports.checkPermission = (permission) => {
   return async (req, res, next) => {
@@ -51,21 +50,10 @@ exports.checkPermission = (permission) => {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const allowedPermissions = [
-        "can_create",
-        "can_edit",
-        "can_delete",
-        "can_read",
-      ];
-
-      if (!allowedPermissions.includes(permission)) {
-        return res.status(400).json({ message: "Invalid permission check" });
-      }
-
       // 🛡️ MASTER ACCESS: Admins like Viren bypass individual permission flags
       if (req.user.role === "admin") return next();
       
-      // Check for the specific boolean permission flag on the standard user
+      // Check for the specific boolean permission flag (e.g., 'can_create')
       if (req.user[permission] === true) return next();
 
       return res.status(403).json({
