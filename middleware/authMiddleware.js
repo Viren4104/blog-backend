@@ -1,48 +1,36 @@
-const User = require("../models/User");
 const jwt = require("jsonwebtoken");
+const User = require("../models/User");
 
-exports.getAllUsers = async (req, res) => {
+// 🛡️ PROTECT: Verify JWT for Blogging App
+exports.protect = async (req, res, next) => {
   try {
-    const users = await User.findAll({ attributes: { exclude: ["password"] } });
-    res.json(users);
+    let token;
+    if (req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
+      token = req.headers.authorization.split(" ")[1];
+    }
+
+    if (!token) return res.status(401).json({ message: "No token provided" });
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Fetch user from Neon DB (Stateless)
+    const user = await User.findByPk(decoded.id, { 
+        attributes: { exclude: ["password"] } 
+    });
+
+    if (!user) return res.status(401).json({ message: "User not found" });
+
+    req.user = user;
+    next();
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    res.status(401).json({ message: "Invalid or expired token" });
   }
 };
 
-exports.updateUserPermissions = async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const user = await User.findByPk(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    await user.update(req.body);
-
-    // Generate new token if admin updates themselves to prevent logout
-    let newToken = null;
-    if (req.user.id === parseInt(userId)) {
-      newToken = jwt.sign(
-        { id: user.id, role: user.role },
-        process.env.JWT_SECRET,
-        { expiresIn: "1d" }
-      );
-    }
-
-    // 📡 SOCKET.IO REAL-TIME PUSH
-    if (global.io) {
-      global.io.to(`user_${userId}`).emit("permissions-updated", {
-        updatedPermissions: {
-          can_create: user.can_create,
-          can_edit: user.can_edit,
-          can_delete: user.can_delete,
-          role: user.role
-        },
-        token: newToken // Frontend swaps the token in localStorage
-      });
-    }
-
-    res.json({ success: true, token: newToken });
-  } catch (err) {
-    res.status(500).json({ message: "Update failed" });
+// 🛡️ ADMIN ONLY (For Blog Admins)
+exports.adminOnly = (req, res, next) => {
+  if (!req.user || req.user.role !== "admin") {
+    return res.status(403).json({ message: "Admin access only" });
   }
+  next();
 };
