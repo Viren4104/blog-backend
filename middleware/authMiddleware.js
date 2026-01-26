@@ -11,7 +11,8 @@ exports.protect = async (req, res, next) => {
       return res.status(401).json({ message: "Unauthorized: No active session" });
     }
 
-    // Fetch user from PostgreSQL (excluding sensitive password field)
+    // Fetch latest user data from PostgreSQL (excluding password)
+    // This ensures permission changes take effect immediately
     const user = await User.findByPk(req.session.userId, {
       attributes: { exclude: ["password"] },
     });
@@ -20,7 +21,7 @@ exports.protect = async (req, res, next) => {
       return res.status(401).json({ message: "User no longer exists" });
     }
 
-    // Attach user to the request object for use in subsequent middleware/controllers
+    // Attach user to the request object for use in controllers
     req.user = user;
     next();
   } catch (err) {
@@ -33,7 +34,7 @@ exports.protect = async (req, res, next) => {
 // 2. ADMIN ONLY ACCESS
 // ===============================
 exports.adminOnly = (req, res, next) => {
-  // Ensure the user attached in 'protect' has the admin role
+  // Ensure the user exists and has the 'admin' role
   if (!req.user || req.user.role !== "admin") {
     return res.status(403).json({ message: "Admin access only" });
   }
@@ -41,7 +42,7 @@ exports.adminOnly = (req, res, next) => {
 };
 
 // ===============================
-// 3. granural PERMISSION CHECK
+// 3. GRANULAR PERMISSION CHECK
 // ===============================
 exports.checkPermission = (permission) => {
   return async (req, res, next) => {
@@ -61,10 +62,10 @@ exports.checkPermission = (permission) => {
         return res.status(400).json({ message: "Invalid permission check" });
       }
 
-      // Master Access: Admins bypass individual permission flags
+      // 🛡️ MASTER ACCESS: Admins like Viren bypass individual permission flags
       if (req.user.role === "admin") return next();
       
-      // Check for specific boolean permission flag on the user model
+      // Check for the specific boolean permission flag on the standard user
       if (req.user[permission] === true) return next();
 
       return res.status(403).json({
