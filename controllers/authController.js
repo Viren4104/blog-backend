@@ -17,19 +17,22 @@ exports.register = async (req, res) => {
       email,
       password: hashedPassword,
       role: "user",
-      // Default permissions for new users
       can_read: true,
       can_create: false,
       can_edit: false,
       can_delete: false
     });
 
-    // ✅ SYNCED: Store only the ID to match your middleware
+    // Store the ID for the middleware
     req.session.userId = newUser.id;
 
-    res.status(201).json({
-      message: "Registered successfully",
-      role: newUser.role,
+    // ✅ FORCE SAVE: Ensures Neon DB is updated before the frontend gets the response
+    req.session.save((err) => {
+      if (err) return res.status(500).json({ message: "Session save failed" });
+      res.status(201).json({
+        message: "Registered successfully",
+        role: newUser.role,
+      });
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -50,12 +53,16 @@ exports.login = async (req, res) => {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
-    // ✅ SYNCED: Store the ID so 'protect' middleware can find it
+    // Attach user ID to session
     req.session.userId = user.id;
 
-    res.json({
-      message: "Logged in successfully",
-      role: user.role,
+    // ✅ FORCE SAVE: Critical for cross-origin setups like Render
+    req.session.save((err) => {
+      if (err) return res.status(500).json({ message: "Session login failed" });
+      res.json({
+        message: "Logged in successfully",
+        role: user.role,
+      });
     });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -63,7 +70,7 @@ exports.login = async (req, res) => {
 };
 
 exports.logout = (req, res) => {
-  // ✅ Correctly destroys session in PostgreSQL and clears browser cookie
+  // Destroy session in DB and clear the cookie named in your server.js
   req.session.destroy((err) => {
     if (err) {
       return res.status(500).json({ message: "Could not log out" });
