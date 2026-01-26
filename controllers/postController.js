@@ -1,25 +1,36 @@
 const Post = require('../models/Post');
 
-// Get all posts
+/**
+ * @desc Get all posts
+ * @route GET /api/posts
+ * @access Public
+ */
 exports.getAllPosts = async (req, res) => {
     try {
+        // Fetches all listings from Neon DB, newest first
         const posts = await Post.findAll({ order: [['createdAt', 'DESC']] });
         res.json(posts);
     } catch (err) {
+        console.error("Fetch Posts Error:", err.message);
         res.status(500).json({ message: "Server error" });
     }
 };
 
-// Create a post
+/**
+ * @desc Create a property post
+ * @route POST /api/posts
+ * @access Protected (requires can_create or admin)
+ */
 exports.createPost = async (req, res) => {
     try {
         const { title, content } = req.body;
         
-        // Check if user has permission to create
+        // 🛡️ RBAC Check: Validates permission attached by protect middleware
         if (!req.user.can_create && req.user.role !== 'admin') {
-            return res.status(403).json({ message: "You don't have permission to create posts" });
+            return res.status(403).json({ message: "Access Denied: You do not have permission to create listings" });
         }
 
+        // Creates record and links it to the logged-in user (Viren/Admin)
         const post = await Post.create({ 
             title, 
             content, 
@@ -28,52 +39,63 @@ exports.createPost = async (req, res) => {
 
         res.status(201).json(post);
     } catch (err) {
-        res.status(500).json({ message: "Error creating post" });
+        console.error("Create Post Error:", err.message);
+        res.status(500).json({ message: "Error creating listing" });
     }
 };
 
-// ✅ NEW: Update (Edit) a post
+/**
+ * @desc Update/Edit a post
+ * @route PUT /api/posts/:postId
+ * @access Protected (requires can_edit or admin)
+ */
 exports.updatePost = async (req, res) => {
     try {
         const { postId } = req.params;
         const { title, content } = req.body;
 
-        // 1. Permission Check: Must have can_edit or be an admin
+        // 🛡️ RBAC Check: Ensures the user has editing rights
         if (!req.user.can_edit && req.user.role !== 'admin') {
-            return res.status(403).json({ message: "You don't have permission to edit posts" });
+            return res.status(403).json({ message: "Access Denied: You do not have permission to edit" });
         }
 
         const post = await Post.findByPk(postId);
-        if (!post) return res.status(404).json({ message: "Post not found" });
+        if (!post) return res.status(404).json({ message: "Listing not found" });
 
-        // Update the post with new data
+        // Update fields only if they are provided in the request
         post.title = title || post.title;
         post.content = content || post.content;
         await post.save();
 
         res.json({ success: true, post });
     } catch (err) {
-        res.status(500).json({ message: "Error updating post" });
+        console.error("Update Post Error:", err.message);
+        res.status(500).json({ message: "Error updating listing" });
     }
 };
 
-// ✅ NEW: Delete a post
+/**
+ * @desc Delete a post
+ * @route DELETE /api/posts/:postId
+ * @access Protected (requires can_delete or admin)
+ */
 exports.deletePost = async (req, res) => {
     try {
         const { postId } = req.params;
 
-        // 1. Permission Check: Must have can_delete or be an admin
+        // 🛡️ RBAC Check: Only admins or users with delete permission
         if (!req.user.can_delete && req.user.role !== 'admin') {
-            return res.status(403).json({ message: "You don't have permission to delete posts" });
+            return res.status(403).json({ message: "Access Denied: You do not have permission to delete" });
         }
 
         const post = await Post.findByPk(postId);
-        if (!post) return res.status(404).json({ message: "Post not found" });
+        if (!post) return res.status(404).json({ message: "Listing not found" });
 
-        await post.destroy();
+        await post.destroy(); // Remove from Neon DB
 
-        res.json({ success: true, message: "Post deleted successfully" });
+        res.json({ success: true, message: "Listing deleted successfully" });
     } catch (err) {
-        res.status(500).json({ message: "Error deleting post" });
+        console.error("Delete Post Error:", err.message);
+        res.status(500).json({ message: "Error deleting listing" });
     }
 };
