@@ -1,16 +1,15 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const bcrypt = require("bcryptjs");
-const session = require("express-session");
-const pgSession = require("connect-pg-simple")(session);
 const http = require("http"); 
 const { Server } = require("socket.io"); 
-
 const sequelize = require("./config/db");
+
+// Import Models for associations
 const User = require("./models/User");
 const Post = require("./models/Post");
 
+// Import Routes
 const authRoutes = require("./routes/authRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const postRoutes = require("./routes/postRoutes");
@@ -18,7 +17,7 @@ const postRoutes = require("./routes/postRoutes");
 const app = express();
 const isProd = process.env.NODE_ENV === "production";
 
-// 1. Create the HTTP server to wrap Express
+// 1. Create the HTTP server to wrap Express (Required for Socket.io)
 const server = http.createServer(app);
 
 /* ===============================
@@ -27,13 +26,13 @@ const server = http.createServer(app);
 app.use(
   cors({
     origin: [
-      "http://localhost:1212", 
-      "http://localhost:5173", 
-      process.env.FRONTEND_URL, 
+      "http://localhost:5173", // Vite default
+      "http://localhost:3000", // Next.js default
+      process.env.FRONTEND_URL, // Render/Vercel Production URL
     ],
     credentials: true, 
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization"], // CRITICAL for JWT Bearer tokens
   })
 );
 
@@ -44,18 +43,18 @@ app.use(express.json());
 ================================ */
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:1212", "http://localhost:5173", process.env.FRONTEND_URL],
+    origin: ["http://localhost:5173", "http://localhost:3000", process.env.FRONTEND_URL],
     credentials: true
   }
 });
 
-// Make 'io' global for controllers to access
+// Make 'io' global so your adminController can emit updates
 global.io = io;
 
 io.on("connection", (socket) => {
   console.log("🟢 Real-time client connected:", socket.id);
 
-  // Users join a private room for targeted updates
+  // Users join a private room based on their ID for targeted permission syncs
   socket.on("join_room", (userId) => {
     socket.join(`user_${userId}`);
     console.log(`👤 User ${userId} joined their private sync room`);
@@ -63,32 +62,6 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => console.log("🔴 Client disconnected"));
 });
-
-/* ===============================
-    SESSION CONFIG (NEON + PG STORE)
-================================ */
-app.use(
-  session({
-    store: new pgSession({
-      conObject: {
-        connectionString: process.env.DATABASE_URL || `postgres://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
-        ssl: { rejectUnauthorized: false },
-      },
-      tableName: "session",
-    }),
-    name: "seaneb.sid",
-    secret: process.env.SESSION_SECRET || "viren_rbac_secret_key",
-    resave: false,
-    saveUninitialized: false,
-    proxy: true, // 🛡️ Required for Render deployment
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24, 
-      httpOnly: true,
-      secure: true, // 🛡️ Required for cross-site cookies on Render
-      sameSite: "none", // 🛡️ Essential for localhost -> Render communication
-    },
-  })
-);
 
 /* ===============================
     MODEL ASSOCIATIONS
@@ -104,45 +77,23 @@ app.use("/api/admin", adminRoutes);
 app.use("/api/posts", postRoutes);
 
 app.get("/", (req, res) => {
-  res.send("🚀 Real Estate RBAC Real-Time Backend Running");
+  res.send("🚀 Real Estate RBAC Real-Time Backend Running on Render");
 });
-
-/* ===============================
-    STATIC ADMIN SEEDER
-================================ */
-const createDefaultAdmin = async () => {
-  try {
-    const adminExists = await User.findOne({ where: { email: "admin@admin.com" } });
-
-    if (!adminExists) {
-      const hashedPassword = await bcrypt.hash("admin123", 10);
-      await User.create({
-        username: "SuperAdmin",
-        email: "admin@admin.com",
-        password: hashedPassword,
-        role: "admin",
-        can_create: true, can_edit: true, can_delete: true, can_read: true,
-      });
-      console.log(`✅ Static admin created: admin@admin.com`);
-    }
-  } catch (err) {
-    console.error("❌ Admin seeder error:", err.message);
-  }
-};
 
 /* ===============================
     SERVER STARTUP
 ================================ */
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
+// Sync database and start the server
 sequelize
-  .sync({ alter: !isProd }) // Keep DB updated in dev
-  .then(async () => {
-    console.log("✅ Database connected");
-    await createDefaultAdmin();
-    // 🛡️ CRITICAL: Listen on 'server' instance
+  .sync({ alter: !isProd }) // Automatically updates Neon DB schema in development
+  .then(() => {
+    console.log("✅ Neon PostgreSQL Database connected");
+    
+    // IMPORTANT: We listen on the 'server' instance, not 'app'
     server.listen(PORT, () => {
-      console.log(`🚀 Real-time server running on port ${PORT}`);
+      console.log(`🚀 Server running in ${isProd ? 'production' : 'development'} mode on port ${PORT}`);
     });
   })
   .catch((err) => {

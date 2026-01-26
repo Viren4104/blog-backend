@@ -1,6 +1,7 @@
 const User = require('../models/User');
-const jwt = require('jsonwebtoken'); // 1. Import JWT
+const jwt = require('jsonwebtoken');
 
+// Fetch all users for the admin dashboard
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.findAll({
@@ -13,6 +14,7 @@ exports.getAllUsers = async (req, res) => {
   }
 };
 
+// Update permissions and refresh the admin token
 exports.updateUserPermissions = async (req, res) => {
   try {
     const { userId } = req.params;
@@ -21,22 +23,21 @@ exports.updateUserPermissions = async (req, res) => {
     const user = await User.findByPk(userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // 🛡️ Security: Prevent modifying other admins
+    // Security: Prevent modifying other admins
     if (user.role === 'admin' && req.user.id !== parseInt(userId)) {
       return res.status(403).json({ message: "Cannot modify another admin" });
     }
 
-    // Save to Neon DB
+    // 1. Update Neon PostgreSQL record
     await user.update(permissions);
 
-    // 🚀 NEW: Generate fresh token if the admin updated THEMSELVES
+    // 2. THE FIX: Create a fresh token if the admin updated THEMSELVES
     let newToken = null;
     if (req.user.id === parseInt(userId)) {
       newToken = jwt.sign(
         { 
           id: user.id, 
           role: user.role,
-          // Include any other permission flags your middleware checks
           can_edit: user.can_edit,
           can_create: user.can_create 
         },
@@ -45,7 +46,7 @@ exports.updateUserPermissions = async (req, res) => {
       );
     }
 
-    // 🚀 Real-time push logic
+    // 3. Real-time push via Socket.io
     if (global.io) {
       global.io.to(`user_${userId}`).emit("permissions-updated", {
         updatedPermissions: {
@@ -55,20 +56,17 @@ exports.updateUserPermissions = async (req, res) => {
           can_delete: user.can_delete,
           can_read: user.can_read
         },
-        newToken: newToken // Also push the token via socket if needed
+        token: newToken 
       });
-      console.log(`📡 Real-time update pushed to User ${userId}`);
     }
 
-    // Send the newToken back so the frontend can update localStorage/Context
     res.json({ 
       success: true, 
-      user,
-      token: newToken 
+      message: "Permissions updated",
+      token: newToken // Frontend must swap the old token with this one
     });
 
   } catch (err) {
-    console.error(err);
     res.status(500).json({ message: "Update failed" });
   }
 };
