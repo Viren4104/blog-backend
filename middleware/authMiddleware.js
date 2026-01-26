@@ -5,22 +5,22 @@ const User = require("../models/User");
 // ===============================
 exports.protect = async (req, res, next) => {
   try {
-    // Check if a session exists and contains a valid userId
+    // Check if session exists and contains the userId set during login
     if (!req.session || !req.session.userId) {
       return res.status(401).json({ message: "Unauthorized: No active session" });
     }
 
-    // 🚀 LIVE SYNC: Fetch fresh user data from the DB on every request.
-    // This allows permissions (like 'can_edit') to update instantly if an admin changes them.
+    // 🚀 THE LIVE SYNC FIX: Fetch fresh user data from Neon PostgreSQL on every request.
+    // This allows permissions to update instantly if an admin changes them.
     const user = await User.findByPk(req.session.userId, {
-      attributes: { exclude: ["password"] }, // 🛡️ Security: Never expose the password
+      attributes: { exclude: ["password"] }, // Security: Never expose the password
     });
 
     if (!user) {
       return res.status(401).json({ message: "User no longer exists" });
     }
 
-    // Attach the current database state of the user to the request object
+    // Attach fresh user object to the request for use in controllers
     req.user = user;
     next();
   } catch (err) {
@@ -30,10 +30,10 @@ exports.protect = async (req, res, next) => {
 };
 
 // ===============================
-// 2. ADMIN ONLY: Restrict Access to Admins (Viren/SuperAdmin)
+// 2. ADMIN ONLY: Restrict to SuperAdmin/Viren
 // ===============================
 exports.adminOnly = (req, res, next) => {
-  // Ensure the user exists (set by protect) and holds the 'admin' role
+  // Ensure the user exists (from protect) and has the 'admin' role
   if (!req.user || req.user.role !== "admin") {
     return res.status(403).json({ message: "Access Denied: Admin access only" });
   }
@@ -62,10 +62,10 @@ exports.checkPermission = (permission) => {
         return res.status(400).json({ message: "Invalid permission check" });
       }
 
-      // 🛡️ MASTER ACCESS: Admins like Viren bypass individual permission flags automatically
+      // 🛡️ MASTER ACCESS: Admins like Viren bypass individual flags automatically
       if (req.user.role === "admin") return next();
       
-      // Check for the specific boolean permission flag on the standard user model
+      // Check for the specific boolean permission flag on the standard user
       if (req.user[permission] === true) return next();
 
       return res.status(403).json({

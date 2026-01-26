@@ -41,11 +41,11 @@ exports.updateUserPermissions = async (req, res) => {
     if (can_delete !== undefined) user.can_delete = can_delete;
     if (can_read !== undefined) user.can_read = can_read;
 
-    // Save changes to the database
+    // Save changes to the Neon database
     await user.save();
 
     // 🚀 LEVEL 3: EMIT REAL-TIME UPDATE
-    // This sends the new permissions directly to the user's private room
+    // This pushes the fresh permissions to the user's private room instantly
     if (global.io) {
       global.io.to(`user_${userId}`).emit("permission_updated", {
         role: user.role,
