@@ -3,8 +3,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
-
-// SESSION & DB PACKAGES
 const session = require('express-session');
 const pgSession = require('connect-pg-simple')(session);
 
@@ -22,31 +20,36 @@ const app = express();
    MIDDLEWARE & SESSIONS
 ================================ */
 app.use(cors({
-  // ✅ IMPORTANT: Use your actual frontend URL (e.g., http://localhost:5173)
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173', 
-  credentials: true, // Required for session cookies to work
+  // ✅ FIXED: Added all your local ports and the Render variable
+  origin: [
+    'http://localhost:1212', 
+    'http://localhost:5173', 
+    'http://localhost:3000',
+    process.env.FRONTEND_URL
+  ],
+  credentials: true, // Required for cookies/sessions
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());
 
-// SESSION CONFIGURATION (Saves sessions in PostgreSQL)
+// SESSION CONFIGURATION
 app.use(session({
   store: new pgSession({
     conObject: {
       connectionString: `postgres://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`,
-      ssl: { rejectUnauthorized: false } // Required for cloud databases like Neon
+      ssl: { rejectUnauthorized: false }
     },
-    tableName: 'session' // Auto-creates a 'session' table
+    tableName: 'session'
   }),
   secret: process.env.SESSION_SECRET || 'viren_rbac_secret_key',
   resave: false,
   saveUninitialized: false,
   cookie: {
-    maxAge: 1000 * 60 * 60 * 24, // 1 Day expiration
-    httpOnly: true, // Protects against XSS
-    secure: process.env.NODE_ENV === 'production', // true on Render/HTTPS
+    maxAge: 1000 * 60 * 60 * 24, // 1 Day
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production', // true on Render
     sameSite: 'lax'
   }
 }));
@@ -65,7 +68,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/posts', postRoutes);
 
 app.get('/', (req, res) => {
-  res.send('🚀 RBAC Backend Running! Sessions & PostgreSQL enabled.');
+  res.send('🚀 RBAC Backend Running! Sessions enabled.');
 });
 
 /* ===============================
@@ -73,10 +76,9 @@ app.get('/', (req, res) => {
 ================================ */
 const createDefaultAdmin = async () => {
   try {
-    // Define your fixed, static admins here
     const staticAdmins = [
       { username: 'SuperAdmin', email: 'admin@admin.com', password: 'admin123' },
-     
+      { username: 'Viren', email: 'viren@test.com', password: 'viren_secure_password' }
     ];
 
     for (const adminData of staticAdmins) {
@@ -89,10 +91,7 @@ const createDefaultAdmin = async () => {
           email: adminData.email,
           password: hashedPassword,
           role: 'admin',
-          can_create: true, 
-          can_edit: true, 
-          can_delete: true, 
-          can_read: true
+          can_create: true, can_edit: true, can_delete: true, can_read: true
         });
         console.log(`✅ Static Admin created: ${adminData.email}`);
       }
@@ -109,9 +108,9 @@ const PORT = process.env.PORT || 3000;
 const isProd = process.env.NODE_ENV === 'production';
 
 sequelize
-  .sync({ alter: !isProd }) // Only alters DB schema in development
+  .sync({ alter: !isProd })
   .then(async () => {
-    console.log('✅ Database connected & synced');
+    console.log('✅ Database connected');
     await createDefaultAdmin();
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
