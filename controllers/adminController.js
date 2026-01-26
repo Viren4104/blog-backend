@@ -1,69 +1,39 @@
-const User = require('../models/User');
-
-/**
- * Controller 1: Get All Users
- * Fetches the user list for the Admin Dashboard.
- */
-exports.getAllUsers = async (req, res) => {
-  try {
-    const users = await User.findAll({
-      attributes: { exclude: ['password'] }, // 🛡️ Security: Never send passwords
-      order: [['id', 'ASC']]
-    });
-    res.json(users);
-  } catch (err) {
-    console.error("GET_USERS_ERROR:", err.message);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-/**
- * Controller 2: Update User Permissions & Role
- * Updates the DB and pushes a real-time notification via Socket.io.
- */
 exports.updateUserPermissions = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { role, can_create, can_edit, can_delete, can_read } = req.body;
-
+    const permissions = req.body; // e.g., { can_edit: true, role: 'user' }
+ 
     const user = await User.findByPk(userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    // 🛡️ Security: Prevent modifying other admins or downgrading yourself
-    if (user.role === 'admin' && req.user.id !== user.id) {
-      return res.status(403).json({ message: "Cannot modify another admin" });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
     }
-
-    // Dynamic updates based on request body
-    if (role !== undefined) user.role = role;
-    if (can_create !== undefined) user.can_create = can_create;
-    if (can_edit !== undefined) user.can_edit = can_edit;
-    if (can_delete !== undefined) user.can_delete = can_delete;
-    if (can_read !== undefined) user.can_read = can_read;
-
-    // Save changes to the Neon database
-    await user.save();
-
-    // 🚀 LEVEL 3: EMIT REAL-TIME UPDATE
-    // This pushes the fresh permissions to the user's private room instantly
-    if (global.io) {
-      global.io.to(`user_${userId}`).emit("permission_updated", {
-        role: user.role,
-        can_create: user.can_create,
-        can_edit: user.can_edit,
-        can_delete: user.can_delete,
-        can_read: user.can_read
+ 
+    // 1. Update the database in Neon
+    await user.update(permissions);
+ 
+    const io = req.app.get("io");
+ 
+    // 2. 🚀 THE FIX: Send the NEW permissions in the emit
+    // Also, use a specific room so other users aren't interrupted
+    if (io) {
+      io.to(`user_${userId}`).emit("permissions-updated", {
+        updatedPermissions: {
+            role: user.role,
+            can_create: user.can_create,
+            can_edit: user.can_edit,
+            can_delete: user.can_delete,
+            can_read: user.can_read
+        }
       });
-      console.log(`📡 Real-time update pushed to User ID: ${userId}`);
+      console.log(`📡 Live update emitted to user_${userId}`);
     }
-
-    res.json({ 
-      success: true, 
-      message: "Permissions updated and pushed live", 
-      updatedUser: user 
+ 
+    res.json({
+      message: "Permissions updated successfully",
+      user,
     });
   } catch (err) {
-    console.error("UPDATE_PERMISSIONS_ERROR:", err.message);
-    res.status(500).json({ message: "Server error" });
+    console.error("Update error:", err);
+    res.status(500).json({ message: "Update failed" });
   }
 };
